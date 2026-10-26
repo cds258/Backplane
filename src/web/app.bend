@@ -263,6 +263,10 @@ def desktop(u: U.Ui) -> U.Ui:
 def desktop_browser(u: U.Ui) -> U.Ui:
   U.Ui.scratch_set(u, "@desktop.browser", "1")
 
+# what the Windows desktop app calls its hub (preload's backplaneDesktop.hub)
+def desktop_hub(u: U.Ui, label: String) -> U.Ui:
+  U.Ui.scratch_set(u, "@desktop.hub", label)
+
 def online(u: U.Ui, +b: Bool) -> U.Ui:
   U.Ui.online(MA.MA.online(u, b), b)
 

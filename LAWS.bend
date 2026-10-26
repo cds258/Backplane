@@ -11399,6 +11399,30 @@ law desktop_connection_close_bytes_unchanged:
   for +hub: String
   {MPCREDIT.Desktop.connection_info("closed", text, version, hub) == text : String}
 
+# The Windows desktop app's Hub row (client.bend's DeskHub): only where
+# host.js named the hub, which only that app's preload does.
+law deskhub_hidden:
+  {U.DeskHub.shown.k("") == False{} : Bool}
+
+law deskhub_shown:
+  for +c: Char
+  for +t: String
+  {U.DeskHub.shown.k(SCon{c, t}) == True{} : Bool}
+
+law deskhub_row_none:
+  for label: String
+  {WPH.View.deskhub.k(False{}, label) == Nil{} : List<&2, DM.Node>}
+
+# The desktop's marks reach the hub-drawn page; form fields never do.
+law actor_local_desktop:
+  {CHATSIDE.Actor.local.key("@desktop") == True{} : Bool}
+
+law actor_local_desktop_hub:
+  {CHATSIDE.Actor.local.key("@desktop.hub") == True{} : Bool}
+
+law actor_local_no_forms:
+  {CHATSIDE.Actor.local.key("@f.password") == False{} : Bool}
+
 # Presentation preferences never replace canonical state, bodies or writer credit.
 
 law presentation_state_kept:

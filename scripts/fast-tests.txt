@@ -18,5 +18,7 @@ test/hotboot_thread_decode_law_test.bend
 test/storedb_test.bend
 test/hotboot_test.bend
 
-# The hub's folder and file shell, in WSL and elsewhere.
+# The Windows desktop app's hub in WSL: the hub's folder and file shell,
+# and Settings' Hub row.
 test/wsl_shell_test.bend
+test/deskhub_test.bend

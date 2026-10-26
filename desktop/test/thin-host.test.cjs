@@ -334,6 +334,13 @@ test('request privacy: views and actions send only the selected draft, language 
  }
 });
 
+test('request privacy: the desktop shell\'s marks cross, bounded; form fields still never do',async()=>{
+ const f=await fixture({session:()=>({sel:'A',rid:1,drafts:{A:'a','@desktop':'1','@desktop.browser':'1','@desktop.hub':'WSL · Ubuntu','@f.password':'PRIVATE_FORM'}})});f.open();
+ assert.deepEqual(f.sent[0].p.session.drafts,{A:'a','@desktop':'1','@desktop.browser':'1','@desktop.hub':'WSL · Ubuntu'});
+ const g=await fixture({session:()=>({sel:'A',rid:1,drafts:{A:'a','@desktop.hub':'x'.repeat(129)}})});g.open();
+ assert.deepEqual(g.sent[0].p.session.drafts,{A:'a'});
+});
+
 test('settings navigation keeps its first click when background refresh races opening Settings',async()=>{
  const f=await fixture({prepare:s=>s});f.open();
  let accepted;

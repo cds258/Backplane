@@ -1625,6 +1625,15 @@ def View.settings.scale(vs: List<&2, String>, +cur: U32) -> List<&2, D.Node>:
     case +v <> t:
       D.Dom.button(Bool.pick(String, U32.is_eq(TS.Scale.read(v), cur), "on", ""), "setting", "ui.text_scale=" ++ v, TS.Scale.label(v), TS.Scale.label(v)) <> View.settings.scale(t, cur)
 
+# Network's first row, only in the Windows desktop app (client.bend's DeskHub)
+def View.deskhub.k(shown: Bool, +label: String) -> List<&2, D.Node>:
+  match shown:
+    case False{}: Nil{}
+    case True{}: [View.setrow(U.DeskHub.title(), U.DeskHub.note(label), [D.Dom.button("", "desktop-backend", "", U.DeskHub.tip(), U.DeskHub.change())])]
+
+def View.deskhub(+u: U.Ui) -> List<&2, D.Node>:
+  View.deskhub.k(U.DeskHub.shown(u), U.DeskHub.label(u))
+
 def View.settings.rows.k(i: Nat, +lc: I.Loc, +u: U.Ui, +st: M.State, +nf: Map<&2, String>, +v: String, +note: String, +prov: String, +ipc: String) -> List<&2, D.Node>:
   match i:
     case 0n: List.concat(&2, D.Node, [[View.setrow(MSG.T.settings.theme(lc), MSG.T.settings.theme.note(lc), View.chips.loc(lc, ["dark", "light"], Bool.pick(String, String.eq(M.Setting.get(st, "ui.theme", ""), "light"), "light", "dark"), "ui.theme"))],
@@ -1646,7 +1655,7 @@ def View.settings.rows.k(i: Nat, +lc: I.Loc, +u: U.Ui, +st: M.State, +nf: Map<&2
     case 4n: List.concat(&2, D.Node, [[View.setrow("KiCad", U.KN.summary(nf), View.kn.path.loc(lc, u) <> View.kn.loc(lc, U.KN.of(nf, st), False{}))],
       [View.setrow(U.FreeCAD.label.loc(lc, nf), U.FreeCAD.note(lc, nf), Nil{})],
       [View.setrow(U.KiCad.ipc.label(lc, nf), U.KiCad.ipc.note(lc, nf), Bool.pick(List<&2, D.Node>, U.KiCad.ipc.ready(nf), View.chips.loc(lc, ["on", "off"], ipc, "kicad.ipc"), Nil{}))]])
-    case 5n: List.concat(&2, D.Node, [[View.setrow(U.Tail.label(lc, nf), U.Tail.note(lc, nf), Nil{})],
+    case 5n: List.concat(&2, D.Node, [View.deskhub(u), [View.setrow(U.Tail.label(lc, nf), U.Tail.note(lc, nf), Nil{})],
       View.mates(lc, u),
       [View.setrow(MSG.T.settings.pair(lc), U.Pair.note(lc, U.Pair.link(nf)), D.Dom.cat(D.Dom.when(U.Pair.qr.ready(nf), D.Dom.button(Bool.pick(String, U.Ui.flag(u, "pairqr"), "on", ""), "flag", "pairqr", MSG.T.settings.pair.qr.tip(lc), MSG.T.settings.pair.code(lc))),
         D.Dom.when(Bool.not(String.is_empty(U.Pair.link(nf))), D.Dom.copy.loc(lc, U.Pair.link(nf)))))],

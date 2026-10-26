@@ -307,6 +307,7 @@ const WORDS = listOf(App.cbor_words());
 let ui = App.page(App.init(now(), cid), location.origin);
 if (window.backplaneDesktop) ui = App.desktop(ui);
 if (window.backplaneDesktop?.browser) ui = App.desktop_browser(ui);
+if (typeof window.backplaneDesktop?.hub === "string" && window.backplaneDesktop.hub) ui = App.desktop_hub(ui, window.backplaneDesktop.hub);
 const desktopBrowser = installDesktopBrowser({bridge:window.backplaneDesktop?.browser,
   isReady:()=>(canonicalBoot||remoteReady)&&socket?.readyState===1,
   onTakeover:owner=>dispatch("tk-takeover",owner)});
@@ -815,6 +816,12 @@ function secretSave(packed) {
 
 function dispatch(action, value, timer) {
   if (action === "secret-save") return secretSave(value);
+  // the desktop shell's own controls, before any hub (the hub-drawn page would get them instead)
+  if (action === "desktop-folder" && window.backplaneDesktop) {
+    window.backplaneDesktop.chooseFolder().then(folder => { if (folder) dispatch("proj-cd", folder); });
+    return true;
+  }
+  if (action === "desktop-backend" && window.backplaneDesktop?.chooseBackend) { void window.backplaneDesktop.chooseBackend(); return true; }
   if (action === "side-toggle" || action === "rail-toggle") return foldToggle(action === "side-toggle" ? "side" : "rail");
   if (["term-toggle", "ws-term-hide", "ws-term-here"].includes(action) || action === "ws-go" && value === "term") terminalOutput.retire();
   else if (["select", "bot", "bot-tab", "uber", "uber-bot", "remote"].includes(action)) terminalOutput.clear();
@@ -872,10 +879,6 @@ function dispatch(action, value, timer) {
       return true;
     }
     if (!timer) { ui = App.presentation_blocked(ui); frontendNode = null; later(); }
-    return true;
-  }
-  if (action === "desktop-folder" && window.backplaneDesktop) {
-    window.backplaneDesktop.chooseFolder().then(folder => { if (folder) dispatch("proj-cd", folder); });
     return true;
   }
   const t0 = PERF ? pnow() : 0;

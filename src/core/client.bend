@@ -10216,6 +10216,31 @@ def RefNav.copy.web(m: Maybe<&2, R.Ref>, +u: Ui) -> Act:
     case None{}: Act{u, Nil{}}
     case Some{r}: RefNav.copy.base(u, r, Ui.info(u, "hub.base"))
 
+# The Windows desktop app's hub (desktop/backend.cjs keeps the choice, the
+# app's startup screen changes it). host.js puts what the app calls it in the
+# scratch "@desktop.hub" ("Windows", "WSL · Ubuntu") in that app alone, so no
+# other client shows the row.
+def DeskHub.label(+u: Ui) -> String:
+  Ui.scratch(u, "@desktop.hub")
+
+def DeskHub.shown.k(+label: String) -> Bool:
+  Bool.not(String.is_empty(label))
+
+def DeskHub.shown(+u: Ui) -> Bool:
+  DeskHub.shown.k(DeskHub.label(u))
+
+def DeskHub.title() -> String:
+  "Hub"
+
+def DeskHub.note(+label: String) -> String:
+  "Runs on " ++ label ++ ". Each hub keeps its own projects and threads; the one you leave keeps running."
+
+def DeskHub.tip() -> String:
+  "Choose where this app's hub runs: Windows or a WSL distro"
+
+def DeskHub.change() -> String:
+  "Change…"
+
 # Settings navigation is client-local; choosing a page never persists a setting.
 # (a page's place here is its number in every client's rows: a new page
 # goes at the end; the menus list them in their own order below)
@@ -10288,7 +10313,7 @@ def Settings.words(i: Nat) -> String:
     case 2n: "agents provider model claude codex grok opencode muse pi omp effort thinking reasoning chain of thought"
     case 3n: "writing titles summaries text model"
     case 4n: "cad kicad freecad ipc path schematic board"
-    case 5n: "network tailscale tailnet pairing pair phone qr machines sync update channel nightly stable version"
+    case 5n: "network tailscale tailnet pairing pair phone qr machines sync update channel nightly stable version hub wsl windows linux distro ubuntu"
     case 6n: "voice microphone dictation transcribe speech openai"
     case 7n: "keys api secrets tokens environment"
     case 8n: "antigravity google gemini sign in"

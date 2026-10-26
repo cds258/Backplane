@@ -20,7 +20,7 @@ function choices(value, accept) {
 // Every view request keeps the same current-thread-only privacy boundary.
 function requestSession(session, _action, target) {
   const drafts = {}, local = object(session.drafts) ? session.drafts : {};
-  for (const key of ['@lang', '@lang.os', '@lang.tag', '@lang.preview', '@desktop.browser']) {
+  for (const key of ['@lang', '@lang.os', '@lang.tag', '@lang.preview', '@desktop', '@desktop.browser', '@desktop.hub']) {
     if (typeof local[key] === 'string' && utf8Bytes(local[key]) <= 128) drafts[key] = local[key];
   }
   if (session.sel && !session.sel.startsWith('@') && Object.hasOwn(local, session.sel) && typeof local[session.sel] === 'string') {

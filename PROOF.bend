@@ -12834,6 +12834,13 @@ def Laws.desktop_unknown_owner_has_no_drive(drive): {==}
 def Laws.desktop_connection_frame_bytes_unchanged(text, version, hub): {==}
 def Laws.desktop_connection_close_bytes_unchanged(text, version, hub): {==}
 
+def Laws.deskhub_hidden(): {==}
+def Laws.deskhub_shown(c, t): {==}
+def Laws.deskhub_row_none(label): {==}
+def Laws.actor_local_desktop(): {==}
+def Laws.actor_local_desktop_hub(): {==}
+def Laws.actor_local_no_forms(): {==}
+
 # The focused universal presentation/credit proofs are reused unchanged.
 
 def Laws.presentation_state_kept(u, p): PRESENTPROOF.state_kept(u, p)
