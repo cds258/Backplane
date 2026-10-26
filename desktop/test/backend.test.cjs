@@ -21,11 +21,14 @@ test('the saved choice: missing, empty or garbled is Windows; a write reads back
     writeBackend(file, parseBackend('wsl:Ubuntu'));
     assert.equal(fs.readFileSync(file, 'utf8'), 'wsl:Ubuntu\n');
     assert.deepEqual(readBackend(file), { kind: 'wsl', distro: 'Ubuntu' });
-    const crash = { writeFileSync: fs.writeFileSync, renameSync: () => { throw new Error('power cut'); } };
+    const crash = { mkdirSync: fs.mkdirSync, writeFileSync: fs.writeFileSync, renameSync: () => { throw new Error('power cut'); } };
     assert.throws(() => writeBackend(file, WINDOWS, crash), /power cut/);
     assert.deepEqual(readBackend(file), { kind: 'wsl', distro: 'Ubuntu' });
     writeBackend(file, WINDOWS);
     assert.deepEqual(readBackend(file), WINDOWS);
+    const fresh = path.join(dir, 'profile', 'backend');
+    writeBackend(fresh, parseBackend('wsl:Ubuntu'));
+    assert.deepEqual(readBackend(fresh), { kind: 'wsl', distro: 'Ubuntu' }, 'a profile folder not made yet is made');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -1,11 +1,16 @@
-// Keep native window decorations and shortcuts without an application menu bar.
-function applicationMenu(Menu, platform) {
+// Keep native window decorations and shortcuts without an application menu
+// bar. changeHub (the Windows app only) opens the startup screen's chooser of
+// hubs, with or without a hub page that can: Ctrl+Shift+H.
+function applicationMenu(Menu, platform, changeHub = null) {
+  if (platform === 'win32' && changeHub) return Menu.buildFromTemplate([{label:'Backplane', submenu:[
+    {label:'Change hub…', accelerator:'Ctrl+Shift+H', click:() => changeHub()}
+  ]}]);
   return platform === 'darwin' ? Menu.buildFromTemplate([{label:'Backplane', submenu:[
     {role:'about'}, {type:'separator'}, {role:'hide'}, {role:'hideOthers'}, {role:'unhide'},
     {type:'separator'}, {role:'quit'}
   ]}]) : null;
 }
-function installShortcuts(window, electron, browser = () => null, platform = process.platform, terminalFocus = () => false) {
+function installShortcuts(window, electron, browser = () => null, platform = process.platform, terminalFocus = () => false, changeHub = null) {
   const bind = contents => contents.on('before-input-event', (event, input) => {
     if (contents !== window.webContents && contents.getOwnerBrowserWindow?.() !== window) return;
     if (input.type !== 'keyDown' || input.alt || input.isComposing) return;
@@ -32,6 +37,8 @@ function installShortcuts(window, electron, browser = () => null, platform = pro
       event.preventDefault();window.minimize();
     } else if (command && key === 'i' && input.shift) {
       event.preventDefault();window.webContents.toggleDevTools();
+    } else if (command && key === 'h' && input.shift && changeHub) {
+      event.preventDefault();changeHub();
     } else if (command && ['l','r','0','+','=','-','w','q'].includes(key)) {
       event.preventDefault();
       if (key === 'l') { window.webContents.focus(); window.webContents.send('desktop:browser-focus-address', {}); }

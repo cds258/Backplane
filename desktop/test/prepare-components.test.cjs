@@ -8,7 +8,7 @@ const desktop = path.join(__dirname, '..');
 
 test('the shell is every file main.cjs and its preloads reach', () => {
   const files = c.appFiles(desktop);
-  for (const f of ['package.json', 'main.cjs', 'preload.cjs', 'service.cjs', 'startup.html', 'startup.css', 'startup.js',
+  for (const f of ['package.json', 'main.cjs', 'preload.cjs', 'service.cjs', 'backend.cjs', 'wsl.cjs', 'startup.html', 'startup.css', 'startup.js',
     'browser-guest.cjs', 'browser-recording-preload.cjs', 'browser-shield.html'])
     assert.ok(files.includes(f), f);
   assert.ok(!files.some(f => f.includes('test') || f.startsWith('produce-') || f === 'stage-linux.cjs'), 'no release tooling in the shell');

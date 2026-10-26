@@ -4,6 +4,7 @@
 // "wsl:<distro>". main.cjs is its only writer; the Settings row, the startup
 // screen and the preload get copies derived from it.
 const fs = require('node:fs');
+const path = require('node:path');
 
 // a name WSL accepts that crosses as one argv word
 const DISTRO = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -25,6 +26,7 @@ function readBackend(file, files = fs) {
   try { return parseBackend(files.readFileSync(file, 'utf8').trim()) ?? WINDOWS; } catch { return WINDOWS; }
 }
 function writeBackend(file, backend, files = fs) {
+  files.mkdirSync(path.dirname(file), { recursive: true });
   files.writeFileSync(file + '.tmp', showBackend(backend) + '\n'); files.renameSync(file + '.tmp', file);
 }
 
