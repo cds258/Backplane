@@ -5,7 +5,7 @@ description: Run Backplane's end-to-end user stories (stories.md) through the re
 
 # Backplane user stories, end to end
 
-`stories.md` lists what a person does with Backplane (32 short stories). Run
+`stories.md` lists what a person does with Backplane (38 short stories). Run
 them through the real UI, the way a person would: clicks, keys, swipes. For
 each step, check that the right thing happened and time how long it took. You
 end up with one JSON result per story and run, plus a report with the totals
@@ -67,6 +67,20 @@ reaches the host as 10.0.2.2). To find elements, use
 the permission dialog doesn't cover the screen.
 
 **I, iOS.** Only on a Mac with the simulator. Otherwise mark it `skip`.
+
+**DW, the Windows app with its hub in WSL.** Only from inside a WSL distro on
+Windows (mark it `skip` elsewhere). `win.sh start NAME [TOKEN]` copies this
+checkout's `desktop/` to a Windows temp folder, starts the Windows Electron
+(44.9.2, fetched and checked once) with an isolated `BACKPLANE_HOME` and
+distro home and prefix, and prints `CDP=`; attach with
+`chromium.connectOverCDP(CDP)` and take the page that is the startup file or
+the hub's origin. Its Install puts `BP_E2E_BIN` into the story's prefix
+behind stand-in agents. The app's own shortcuts (Ctrl+Shift+H) take real
+keys, `win.sh keys NAME '^+h'`: CDP's key events never reach them.
+`win.sh quit` stops the app's own Windows PID,
+`win.sh again` starts it on the same homes, `win.sh stop` also stops the
+hub the app started, and `win.sh explorer` / `explorer-close URL` check and
+close the Explorer window a story opened. Close nothing else on Windows.
 
 Handy hooks on the web and desktop:
 - The tour has a Skip button.

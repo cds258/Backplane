@@ -5,6 +5,9 @@
 #
 #   hub.sh start NAME      start one; prints shell lines: PORT= TOKEN= URL=
 #                          PAIR= HOME_DIR= PROJ= MULTI= THREAD= PID=
+#   hub.sh prep NAME       only its folders, fixture projects and stand-in
+#                          agents, no hub (win.sh's hub in WSL); prints
+#                          ROOT= HOME_DIR= PROJ= MULTI= FAKE= USERHOME=
 #   hub.sh long NAME [N]   a thread of N (80) exchanges in the fixture
 #                          project (the history-paging stories); prints LONG=
 #   hub.sh stop NAME       stop it (the PID it started, nothing else)
@@ -54,17 +57,21 @@ seed() {
   printf '{"project": "boards/alpha/alpha.kicad_pro"}\n' > "$root/multi/.backplane.json"
 }
 
+prep() {
+  [ ! -d "$root/home" ] || return 0
+  mkdir -p "$root/home" "$root/fake" "$root/userhome"
+  seed
+  # bun by its path: a hub started by wsl.exe has no login PATH
+  printf '#!/bin/sh\nexec %s "%s/test/tools/claude_standin.ts" "$@"\n' "$(command -v bun)" "$repo" > "$root/fake/claude"
+  chmod +x "$root/fake/claude"
+  python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])' > "$root/port"
+}
+
 start() {
   [ -x "$bin" ] || { echo "no hub binary at $bin (set BP_E2E_BIN)" >&2; exit 1; }
   if [ -f "$root/pid" ] && kill -0 "$(cat "$root/pid")" 2>/dev/null; then echo "already running: $root" >&2; exit 1; fi
-  if [ ! -d "$root/home" ]; then
-    mkdir -p "$root/home" "$root/fake" "$root/userhome"
-    seed
-    printf '#!/bin/sh\nexec bun "%s/test/tools/claude_standin.ts" "$@"\n' "$repo" > "$root/fake/claude"
-    chmod +x "$root/fake/claude"
-    python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])' > "$root/port"
-    fresh=1
-  else fresh=0; fi
+  fresh=0; [ -d "$root/home" ] || fresh=1
+  prep
   port=$(cat "$root/port")
   set -- "$bin" --home "$root/home" --port "$port" --no-tailscale --foreground
   [ -d "$web" ] && set -- "$@" --web "$web"
@@ -113,6 +120,8 @@ rpc_project() { grep -o '"ProjectCreated","id":"[^"]*","title":"proj"' "$root/ho
 
 case $cmd in
   start) start ;;
+  prep) command -v bun >/dev/null || { echo "bun is not on PATH" >&2; exit 1; }; prep
+    printf 'ROOT=%s\nHOME_DIR=%s\nPROJ=%s\nMULTI=%s\nFAKE=%s\nUSERHOME=%s\n' "$root" "$root/home" "$root/proj" "$root/multi" "$root/fake" "$root/userhome" ;;
   stop) stop ;;
   restart) stop; start ;;
   long) long "$@" ;;
