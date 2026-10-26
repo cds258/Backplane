@@ -4636,12 +4636,26 @@ def Proj.items.k(+l: I.Loc, path: Bool, +u: Ui, +q: String, +dir: String, +ns: L
     case False{}:
       Proj.items.q(l, String.is_empty(q), u, q, dir, ns)
 
+# a drive letter, then ":\" or ":/"
+def Proj.drive(+q: String) -> Bool:
+  match q:
+    case SNil{}:
+      False{}
+    case SCon{c, +t}:
+      Bool.and(Char.is_alpha(c), Bool.or(String.starts_with(t, ":\\"), String.starts_with(t, ":/")))
+
+# a typed path, not a filter: /..., ~..., or a Windows one (C:\..., C:/...,
+# \\server\...), which a hub in WSL takes as its own (links.bend's
+# Link.wsl.path.sh) and any other hub refuses as no such folder
+def Proj.is_path(+q: String) -> Bool:
+  Bool.or(Bool.or(String.starts_with(q, "/"), String.starts_with(q, "~")), Bool.or(Proj.drive(q), String.starts_with(q, "\\\\")))
+
 # the folder browser's rows. No filter: add the listed folder (once), the
 # parent, the subfolders. A filter: matching subfolders best first, then
 # creating the typed name (only when no folder has it), then adding. A
-# typed path (/..., ~...) goes there instead
+# typed path (Proj.is_path) goes there instead
 def Proj.folders(+l: I.Loc, +u: Ui) -> List<&2, PItem>:
-  Proj.items.k(l, Bool.or(String.starts_with(Proj.query(u), "/"), String.starts_with(Proj.query(u), "~")), u, Proj.query(u), Proj.dir(u), Proj.entries(u))
+  Proj.items.k(l, Proj.is_path(Proj.query(u)), u, Proj.query(u), Proj.dir(u), Proj.entries(u))
 
 # a path under home written with ~ (as is when home is not known)
 def Proj.tilde(+home: String, +p: String) -> String:
@@ -4756,7 +4770,7 @@ def Proj.items.m(+l: I.Loc, dir: Bool, +u: Ui) -> List<&2, PItem>:
     case True{}:
       Proj.folders(l, u)
     case False{}:
-      Proj.items.p(l, Bool.or(String.starts_with(Proj.query(u), "/"), String.starts_with(Proj.query(u), "~")), String.is_empty(Proj.query(u)), u, Proj.query(u))
+      Proj.items.p(l, Proj.is_path(Proj.query(u)), String.is_empty(Proj.query(u)), u, Proj.query(u))
 
 # what the picker offers. The projects: adding from a folder first, then
 # every project (with a filter: those matching, best first, then adding

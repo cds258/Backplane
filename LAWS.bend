@@ -11423,6 +11423,17 @@ law actor_local_desktop_hub:
 law actor_local_no_forms:
   {CHATSIDE.Actor.local.key("@f.password") == False{} : Bool}
 
+# A typed Windows path in the project picker is a path, as on a hub in WSL;
+# a name stays a filter.
+law proj_path_drive:
+  {[U.Proj.is_path("C:\\Users\\me"), U.Proj.is_path("d:/boards")] == [True{}, True{}] : List<&2, Bool>}
+
+law proj_path_share:
+  {U.Proj.is_path("\\\\wsl.localhost\\Ubuntu\\home") == True{} : Bool}
+
+law proj_path_filter:
+  {[U.Proj.is_path("board"), U.Proj.is_path("a:b"), U.Proj.is_path("C:x"), U.Proj.is_path("")] == [False{}, False{}, False{}, False{}] : List<&2, Bool>}
+
 # Presentation preferences never replace canonical state, bodies or writer credit.
 
 law presentation_state_kept:

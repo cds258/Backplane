@@ -12840,6 +12840,9 @@ def Laws.deskhub_row_none(label): {==}
 def Laws.actor_local_desktop(): {==}
 def Laws.actor_local_desktop_hub(): {==}
 def Laws.actor_local_no_forms(): {==}
+def Laws.proj_path_drive(): {==}
+def Laws.proj_path_share(): {==}
+def Laws.proj_path_filter(): {==}
 
 # The focused universal presentation/credit proofs are reused unchanged.
 
