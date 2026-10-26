@@ -2316,26 +2316,8 @@ def Codex.fed(r: U.Lines & List<&2, String>, s: Socket, +ended: Bool, +thread: S
 
 # Folders for the project picker
 # ------------------------------
-# The path is always an argument ($1), never part of a script.
-
-# $d from $1: "" and ~ are home, ~/x and relative paths are under home
-def FsJob.path.sh() -> String:
-  "d=\"$1\"; case \"$d\" in ''|'~') d=\"$HOME\";; '~/'*) d=\"$HOME/${d#??}\";; /*) ;; *) d=\"$HOME/$d\";; esac; "
-
-# a folder that exists and can be opened, printed resolved (symlinks too)
-def FsJob.dir.sh() -> String:
-  "[ -e \"$d\" ] || { echo \"no such folder: $d\"; exit 2; }; [ -d \"$d\" ] || { echo \"not a folder: $d\"; exit 2; }; [ -r \"$d\" ] && [ -x \"$d\" ] && d=$(cd -P -- \"$d\" && pwd -P) || { echo \"cannot open: $d\"; exit 2; }; "
-
-def FsJob.list.sh() -> String:
-  "exec 2>&1; set -e; " ++ FsJob.path.sh() ++ FsJob.dir.sh() ++ "echo \"$d\"; find \"$d\" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sed 's|^.*/||' | LC_ALL=C sort | head -n 5000"
-
-# a new folder (and any missing parents); an existing one is refused
-def FsJob.mkdir.sh() -> String:
-  "exec 2>&1; set -e; " ++ FsJob.path.sh() ++ "if [ -e \"$d\" ] || [ -L \"$d\" ]; then echo \"already exists: $d\"; exit 3; fi; mkdir -p -- \"$d\"; " ++ FsJob.dir.sh() ++ "echo \"$d\""
-
-# the folder a project would have
-def FsJob.resolve.sh() -> String:
-  "exec 2>&1; set -e; " ++ FsJob.path.sh() ++ FsJob.dir.sh() ++ "echo \"$d\""
+# The path is always an argument ($1), never part of a script (the shell
+# is links.bend's Folder.*).
 
 # folders under home holding .backplane or .backplane.json (Backplane
 # projects), five levels down at most; other hidden folders, node_modules
@@ -2401,7 +2383,7 @@ def FsJob.answer(+inbox: Chan(Msg), +client: U32, +id: String, +r: J.Json) -> IO
   GitJob.reply(inbox, client, id, FsJob.ok(r), r)
 
 def FsJob.list(+inbox: Chan(Msg), +client: U32, +id: String, +path: String) -> IO(Unit):
-  IO.bind(P.Ran, Unit, P.Proc.run("sh", ["-c", FsJob.list.sh(), "sh", path], "/"), r => FsJob.answer(inbox, client, id, FsJob.listed(r)))
+  IO.bind(P.Ran, Unit, P.Proc.run("sh", ["-c", LK.Folder.list.sh(), "sh", path], "/"), r => FsJob.answer(inbox, client, id, FsJob.listed(r)))
 
 def FsJob.last(ls: List<&2, String>) -> String:
   Maybe.default(&2, String, List.last(&2, String, ls), "")
@@ -2433,11 +2415,11 @@ def FsJob.sh(+sh: String, +path: String) -> IO(P.Ran):
 def FsJob.run.k(i: Nat, +inbox: Chan(Msg), +client: U32, +id: String, +path: String) -> IO(Unit):
   match i:
     case 1n:
-      IO.bind(P.Ran, Unit, FsJob.sh(FsJob.mkdir.sh(), path), r => FsJob.made(r, inbox, client, id))
+      IO.bind(P.Ran, Unit, FsJob.sh(LK.Folder.mkdir.sh(), path), r => FsJob.made(r, inbox, client, id))
     case 2n:
-      IO.bind(P.Ran, Unit, FsJob.sh(FsJob.resolve.sh(), path), r => FsJob.create(r, inbox, client, id))
+      IO.bind(P.Ran, Unit, FsJob.sh(LK.Folder.resolve.sh(), path), r => FsJob.create(r, inbox, client, id))
     case 3n:
-      IO.bind(P.Ran, Unit, FsJob.sh(FsJob.mkdir.sh(), path), r => FsJob.create(r, inbox, client, id))
+      IO.bind(P.Ran, Unit, FsJob.sh(LK.Folder.mkdir.sh(), path), r => FsJob.create(r, inbox, client, id))
     case 4n:
       IO.bind(P.Ran, Unit, FsJob.sh(FsJob.find.sh(), path), r => FsJob.answer(inbox, client, id, FsJob.found(r)))
     case _:
@@ -14591,8 +14573,8 @@ def Hub.google(bot: Bool, h: Hub, +thread: String, +o: J.Json, +reply: Chan(Stri
 
 # the folder from $1 (never empty), made when missing, printed resolved
 def Np.sh() -> String:
-  "exec 2>&1; set -e; [ -n \"$1\" ] || { echo \"name a folder\"; exit 2; }; " ++ FsJob.path.sh() ++
-    "[ -e \"$d\" ] || [ -L \"$d\" ] || mkdir -p -- \"$d\"; " ++ FsJob.dir.sh() ++ "echo \"$d\""
+  "exec 2>&1; set -e; [ -n \"$1\" ] || { echo \"name a folder\"; exit 2; }; " ++ LK.Folder.path.sh() ++
+    "[ -e \"$d\" ] || [ -L \"$d\" ] || mkdir -p -- \"$d\"; " ++ LK.Folder.dir.sh() ++ "echo \"$d\""
 
 def Np.ran(r: P.Ran, +inbox: Chan(Msg), +thread: String, +name: String, +id: J.Json, +reply: Chan(String)) -> IO(Unit):
   match r:

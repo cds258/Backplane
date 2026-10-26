@@ -17,3 +17,6 @@ test/folded_actions_test.bend
 test/hotboot_thread_decode_law_test.bend
 test/storedb_test.bend
 test/hotboot_test.bend
+
+# The hub's folder and file shell, in WSL and elsewhere.
+test/wsl_shell_test.bend
