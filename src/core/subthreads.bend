@@ -263,3 +263,34 @@ def Legacy.go(ts: List<&2, M.Thread>) -> List<&2, M.Thread>:
 
 def Legacy.threads(s: M.State) -> List<&2, M.Thread>:
   List.sort(~M.Thread, ~Tree.before, Legacy.go(Tree.all(s)))
+
+# Retired conversations may still own work or wait on the person. They
+# remain on the visible list even when Conversation history is collapsed.
+# Selection also keeps a just-settled row in place without changing it.
+def Legacy.unsettled(sh: M.Shelf) -> Bool:
+  match sh:
+    case M.Active{}: True{}
+    case M.Pinned{}: True{}
+    case _: False{}
+
+def Legacy.waiting(as: List<&2, M.Ask>, +thread: String) -> Bool:
+  match as:
+    case Nil{}: False{}
+    case M.Ask{_, th, _, _, _, _, open, _} <> rest:
+      Bool.or(Bool.and(open, String.eq(th, thread)), Legacy.waiting(rest, thread))
+
+def Legacy.attention(+kids: Map<&2, Nat>, +s: M.State, +t: M.Thread, +selected: String) -> Bool:
+  Bool.and(Bool.not(M.Thread.hidden(t)), Bool.or(String.eq(M.Thread.id(t), selected),
+    Bool.or(Legacy.unsettled(M.Shelf.of(t)), Bool.or(Legacy.waiting(M.Asks.all(s), M.Thread.id(t)), M.Lifecycle.working(kids, s, t)))))
+
+def Legacy.pick(ts: List<&2, M.Thread>, +kids: Map<&2, Nat>, +s: M.State, +selected: String, +live: Bool) -> List<&2, M.Thread>:
+  match ts:
+    case Nil{}: Nil{}
+    case +t <> rest:
+      Tree.roots.add(Bool.not(Tree.same(Legacy.attention(kids, s, t, selected), live)), t, Legacy.pick(rest, kids, s, selected, live))
+
+def Legacy.live(+s: M.State, selected: String) -> List<&2, M.Thread>:
+  Legacy.pick(Legacy.threads(s), M.Work.kids.map(s), s, selected, True{})
+
+def Legacy.history(+s: M.State, selected: String) -> List<&2, M.Thread>:
+  Legacy.pick(Legacy.threads(s), M.Work.kids.map(s), s, selected, False{})

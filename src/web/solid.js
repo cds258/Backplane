@@ -51,8 +51,10 @@ export function isPlot(b) {
     b[3] === 0x70 && b[4] === 0x6c && b[5] === 0x6f && b[6] === 0x74;
 }
 
-// the triangles of a plot's mesh: positions, flat normals and colours
-function mesh(o) {
+// The wire uses board axes (x right, y down, z up). WebGL's orbit is
+// right-handed: turn the wire into (x, -y, z) before normals and bounds.
+// Applying this to every vertex keeps all board layers and parts registered.
+export function mesh(o) {
   const bytes = o.mesh;
   const n = o.n | 0;
   let i = 0;
@@ -74,7 +76,7 @@ function mesh(o) {
     color = (color ^ next()) >>> 0;
     for (let k = 0; k < 3; k += 1) {
       px += signed(); py += signed(); pz += signed();
-      p[3 * k] = px; p[3 * k + 1] = py; p[3 * k + 2] = pz;
+      p[3 * k] = px; p[3 * k + 1] = -py; p[3 * k + 2] = pz;
     }
     const ux = p[3] - p[0], uy = p[4] - p[1], uz = p[5] - p[2];
     const vx = p[6] - p[0], vy = p[7] - p[1], vz = p[8] - p[2];

@@ -15,6 +15,7 @@ const { exactObject } = require('./browser-wire.cjs');
 const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const { createConnectionLog } = require('./connection-log.cjs');
+const { createImageActions, installImageMenu } = require('./image-actions.cjs');
 
 // Checkout launches always name an isolated home. Packaging supplies its
 // explicit product configuration after root's integration review.
@@ -49,6 +50,7 @@ const backendFile = path.join(app.getPath('userData'), 'backend');
 let backend = offersWsl ? readBackend(backendFile) : WINDOWS;
 let service = nativeService, dialogStart;
 let desktopBrowser;
+const imageActions = createImageActions({ electron, origin: () => origin });
 let quitting = false;
 let terminalFocused = false;
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -241,6 +243,10 @@ function start() {
     const result = await dialog.showOpenDialog(window, { properties: ['openDirectory'], ...(dialogStart ? { defaultPath: dialogStart } : {}) });
     return result.canceled ? null : result.filePaths[0];
   });
+  for (const operation of ['local', 'copy', 'reveal']) ipcMain.handle('desktop:image-' + operation, (event, value) => {
+    if (!trusted(event)) throw new Error('Invalid image sender');
+    return imageActions[operation](value);
+  });
   ipcMain.handle('desktop:browser-present',(event,value)=>{
     if(!trusted(event)||!directBrowser)throw new Error('Invalid Browser sender');
     exactObject(value,['owner','bounds']);exactObject(value.bounds,['x','y','width','height']);
@@ -272,6 +278,9 @@ function createWindow(ses) {
     if (!details.frame || details.frame === window.webContents.mainFrame) connectionLog.capture(details.message ?? legacyMessage);
   });
   window.setMenuBarVisibility(false);
+  installImageMenu(window, { electron, actions: imageActions, trusted: params => {
+    try { return params.frame === window.webContents.mainFrame && new URL(params.pageURL).origin === origin && new URL(params.frameURL).origin === origin; } catch { return false; }
+  } });
   installShortcuts(window, electron, () => directBrowser ? desktopBrowser : null, process.platform, () => terminalFocused, offersWsl ? () => void choose() : null);
   window.webContents.on('did-start-navigation', () => { terminalFocused = false; });
   window.webContents.on('blur', () => { terminalFocused = false; });

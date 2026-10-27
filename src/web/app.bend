@@ -387,9 +387,15 @@ def keys_page() -> String:
 # style it answers on the picture)
 
 def lb_node.loc(+lc: I.Loc, url: String) -> D.Node:
-  D.El{"div", "", [D.At{"class", "lightbox"}], [
+  D.El{"div", "", [D.At{"class", "lightbox"}, D.At{"role", "dialog"}, D.At{"aria-modal", "true"}, D.At{"aria-label", MSG.T.native.image.plain(lc)}], [
     D.El{"img", "", [D.At{"class", "lb-img"}, D.At{"src", url}, D.At{"alt", ""}, D.At{"draggable", "false"}], Nil{}},
-    D.El{"button", "", [D.At{"class", "lb-close"}, D.At{"title", MSG.T.common.close(lc)}, D.At{"data-lb-close", "1"}], [D.Txt{"×"}]}]}
+    D.El{"div", "", [D.At{"class", "lb-tools"}], [
+      D.El{"button", "", [D.At{"data-lb-copy", "1"}], [D.Txt{MSG.T.image.copy(lc)}]},
+      D.El{"button", "", [D.At{"data-lb-reveal", "1"}, D.At{"hidden", ""}], [D.Txt{MSG.T.image.show(lc)}]},
+      D.El{"button", "", [D.At{"data-lb-save", "1"}], [D.Txt{MSG.T.common.save(lc)}]},
+      D.El{"button", "", [D.At{"data-lb-share", "1"}, D.At{"hidden", ""}], [D.Txt{MSG.T.image.share(lc)}]}]},
+    D.El{"div", "", [D.At{"class", "lb-status"}, D.At{"data-lb-status", "1"}, D.At{"role", "status"}], Nil{}},
+    D.El{"button", "", [D.At{"class", "lb-close"}, D.At{"title", MSG.T.common.close(lc)}, D.At{"aria-label", MSG.T.common.close(lc)}, D.At{"data-lb-close", "1"}], [D.Txt{"×"}]}]}
 
 def lb_node(url: String) -> D.Node:
   lb_node.loc(I.En{}, url)

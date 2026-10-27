@@ -53,7 +53,8 @@ stories never see each other's threads.
 **D, desktop app.** Run the packaged app against the story's hub:
 `env -u ELECTRON_RUN_AS_NODE BACKPLANE_HOME=$HOME_DIR <app>/desktop/runtime/backplane-desktop --remote-debugging-port=<free port>`.
 Attach with `chromium.connectOverCDP(...)` and take the page whose URL is the
-hub's. Use a display: Xvfb on Linux, `--ozone-platform=x11`. D differs from W
+hub's. A desktop app older or newer than the hub stops at "Service version
+differs": add `BACKPLANE_SERVICE_VERSION=<the hub's /hello version>` to its env. Use a display: Xvfb on Linux, `--ozone-platform=x11`. D differs from W
 in its real window: smooth scrolling, its own startup and cache. Scroll it
 with `mouse.wheel` in 100 px notches.
 

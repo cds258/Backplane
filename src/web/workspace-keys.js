@@ -35,7 +35,7 @@ export function workspaceShortcut(event, platform = '') {
 export function installWorkspaceKeys({ dispatch, document: doc = document, platform = navigator.platform }) {
   doc.addEventListener('keydown', event => {
     if (event.isComposing || event.keyCode === 229 || event.defaultPrevented) return;
-    if (doc.querySelector('.tour')) return; // Existing consent/tour owns every key.
+    if (doc.querySelector('.tour,.lightbox')) return; // The active overlay owns every key.
     const palette = doc.querySelector('.workspace-palette');
     if (palette) {
       const action = { Escape: 'ws-palette-close', Enter: 'ws-palette-enter', ArrowUp: 'ws-palette-move', ArrowDown: 'ws-palette-move' }[event.key];

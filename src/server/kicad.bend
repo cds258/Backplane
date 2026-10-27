@@ -6,6 +6,7 @@ import ../core/utf8.bend as U
 import ../core/kihealth.bend as KH
 import ../core/port.bend as PORT
 import ../core/kicad_install.bend as KI
+import ./kicad_library.bend as KL
 
 # KiCad on this machine: which kicad-cli to use (the Backplane KiCad fork,
 # with IPC, when present), a project's canonical files, and the KiStack
@@ -34,18 +35,6 @@ def KiCad.native_args(args: List<&2, String>) -> IO(List<&2, String>):
         head : String <- H.Sys.native_path(h)
         tail : List<&2, String> <- KiCad.native_args(t)
         return head <> tail
-
-def KiCad.run.k(empty: Bool, cli: String, args: List<&2, String>) -> IO(P.Ran):
-  match empty:
-    case True{}: IO.pure(P.Ran, P.Ran{127, KiCad.missing()})
-    case False{}:
-      do IO<P.Ran>:
-        native : List<&2, String> <- KiCad.native_args(args)
-        P.Proc.run(cli, native, "/")
-
-# a KiCad command's result, or KiCad.missing() without a kicad-cli
-def KiCad.run(+cli: String, args: List<&2, String>) -> IO(P.Ran):
-  KiCad.run.k(String.is_empty(cli), cli, args)
 
 def KiCad.version() -> String:
   "10.99.0-bp.4"
@@ -170,6 +159,35 @@ def Rt.root.normal(+cli: String) -> String:
 
 def Rt.root(cli: String) -> String:
   Rt.root.normal(String.join(String.split(cli, '\\'), "/"))
+
+def KiCad.prepare.found(found: Bool, cli: String) -> IO(String):
+  match found:
+    case True{}: KL.Library.prepare(Rt.root(cli))
+    case False{}: IO.pure(String, "")
+
+def KiCad.prepare(+cli: String) -> IO(String):
+  IO.bind(Bool, String, Io.is_file(cli), found => KiCad.prepare.found(found, cli))
+
+def KiCad.agent_env() -> IO(List<&2, String>):
+  KL.Library.child_env()
+
+def KiCad.run.prepared(fine: Bool, why: String, cli: String, args: List<&2, String>) -> IO(P.Ran):
+  match fine:
+    case False{}: IO.pure(P.Ran, P.Ran{126, why})
+    case True{}:
+      do IO<P.Ran>:
+        native : List<&2, String> <- KiCad.native_args(args)
+        P.Proc.run(cli, native, "/")
+
+def KiCad.run.k(empty: Bool, +cli: String, args: List<&2, String>) -> IO(P.Ran):
+  match empty:
+    case True{}: IO.pure(P.Ran, P.Ran{127, KiCad.missing()})
+    case False{}:
+      IO.bind(String, P.Ran, KiCad.prepare(cli), +why => KiCad.run.prepared(String.is_empty(why), why, cli, args))
+
+# CLI exports in the hub and plot/review children get the real process env.
+def KiCad.run(+cli: String, args: List<&2, String>) -> IO(P.Ran):
+  KiCad.run.k(String.is_empty(cli), cli, args)
 
 def Rt.env(name: String) -> IO(String):
   do IO<String>:
@@ -392,13 +410,34 @@ def Rt.refresh.k(check: Bool, +home: String, +setting: String, +stamp: String, +
         chosen_stamp : String <- Rt.stamps(Rt.watch(cs, Rt.cli(rt2)))
         return Rt.set(Rt.set(Rt.set(rt2, "setting", J.Str{setting}), "stamp", J.Str{chosen_stamp}), "can_install", J.Flag{can})
 
+def Rt.library.cleared(had_error: Bool, +rt: Rt) -> Rt:
+  match had_error:
+    case True{}: Rt.set(Rt.set(Rt.set(rt, "status", J.Str{Rt.cache.status(Rt.json(rt))}), "why", J.Str{""}), "library_error", J.Str{""})
+    case False{}: Rt.set(rt, "library_error", J.Str{""})
+
+def Rt.library.result(fine: Bool, +why: String, +rt: Rt) -> Rt:
+  match fine:
+    case True{}: Rt.library.cleared(Bool.not(String.is_empty(J.Json.get_str(Rt.health(rt), "library_error", ""))), rt)
+    case False{}: Rt.set(Rt.set(Rt.set(rt, "library_error", J.Str{why}), "why", J.Str{why}), "status", J.Str{"failed"})
+
+def Rt.library.found(found: Bool, +rt: Rt) -> IO(Rt):
+  match found:
+    case False{}: IO.pure(Rt, rt)
+    case True{}: IO.bind(String, Rt, KL.Library.prepare(Rt.root(Rt.cli(rt))), +why => IO.pure(Rt, Rt.library.result(String.is_empty(why), why, rt)))
+
+# Background selection, never ordinary boot: activate before health is sent
+# and before new agent children inherit the selected KiCad environment.
+def Rt.library(+rt: Rt) -> IO(Rt):
+  IO.bind(Bool, Rt, Io.is_file(Rt.cli(rt)), found => Rt.library.found(found, rt))
+
 def Rt.refresh(+home: String, +setting: String, +exe: String, force: Bool, +last: Rt) -> IO(Rt):
   do IO<Rt>:
     explicit : String <- Rt.env("BACKPLANE_KICAD_CLI")
     +cs : List<&2, KCandidate> <- Rt.list(setting, explicit, exe, home)
     +stamp : String <- Rt.stamps(Rt.watch(cs, Rt.cli(last)))
     os : P.Ran <- P.Proc.run("uname", ["-sm"], "/")
-    Rt.refresh.k(Bool.or(force, Bool.or(String.eq(Rt.status(last), "checking"), Bool.not(String.eq(J.Json.get_str(Rt.health(last), "stamp", ""), stamp)))), home, setting, stamp, cs, KI.Install.available(KI.Install.platform(Rt.platform(os))), last)
+    rt : Rt <- Rt.refresh.k(Bool.or(force, Bool.or(String.eq(Rt.status(last), "checking"), Bool.not(String.eq(J.Json.get_str(Rt.health(last), "stamp", ""), stamp)))), home, setting, stamp, cs, KI.Install.available(KI.Install.platform(Rt.platform(os))), last)
+    Rt.library(rt)
 
 # Project files
 # -------------
@@ -549,16 +588,28 @@ def KiCad.open.said(r: P.Ran) -> String:
     case P.Ran{_, out}:
       String.trim(out)
 
-def KiCad.open.k(fork: Bool, +cli: String, +fs: Files) -> IO(String):
+def KiCad.open.script() -> String:
+  "set -eu\nr=$1\nif [ -n \"$2\" ]; then set -- kicad \"$2\"; elif [ -n \"$3\" ]; then set -- pcbnew \"$3\"; elif [ -n \"$4\" ]; then set -- eeschema \"$4\"; else echo 'no KiCad project here'; exit 1; fi\ng=$r/bin/$1\n[ -x \"$g\" ] || g=$g.exe\n[ -x \"$g\" ] || { echo \"Backplane KiCad has no $1\"; exit 1; }\nif command -v setsid >/dev/null 2>&1; then\n  setsid -f \"$g\" \"$2\" </dev/null >/dev/null 2>&1\nelse\n  perl -MPOSIX -e 'defined(my $pid=fork) or exit 127; exit 0 if $pid; POSIX::setsid(); exec {$ARGV[0]} @ARGV or exit 127' \"$g\" \"$2\" </dev/null >/dev/null 2>&1\nfi\n"
+
+def KiCad.open.ready(fork: Bool, +cli: String, +fs: Files) -> IO(String):
   match fork fs:
     case True{} Files{+pro, +pcb, +sch, _}:
       do IO<String>:
-        r : P.Ran <- P.Proc.run("sh", ["-c",
-          "r=\"$1\"; if [ -n \"$2\" ]; then set -- kicad \"$2\"; elif [ -n \"$3\" ]; then set -- pcbnew \"$3\"; elif [ -n \"$4\" ]; then set -- eeschema \"$4\"; else echo \"no KiCad project here\"; exit 1; fi; [ -x \"$r/bin/$1\" ] || { echo \"Backplane KiCad has no $1\"; exit 1; }; setsid -f \"$r/bin/$1\" \"$2\" </dev/null >/dev/null 2>&1",
-          "sh", Rt.root(cli), pro, pcb, sch], "/")
+        native : List<&2, String> <- KiCad.native_args([Rt.root(cli), pro, pcb, sch])
+        r : P.Ran <- P.Proc.run("sh", List.append(&2, String, ["-c", KiCad.open.script(), "sh"], native), "/")
         return KiCad.open.said(r)
     case False{} _:
       IO.pure(String, "Install Backplane KiCad (Settings) to open projects in it")
+
+def KiCad.open.prepared(fine: Bool, why: String, fork: Bool, cli: String, fs: Files) -> IO(String):
+  match fine:
+    case True{}: KiCad.open.ready(fork, cli, fs)
+    case False{}: IO.pure(String, why)
+
+def KiCad.open.k(fork: Bool, +cli: String, fs: Files) -> IO(String):
+  match fork:
+    case True{}: IO.bind(String, String, KiCad.prepare(cli), +why => KiCad.open.prepared(String.is_empty(why), why, True{}, cli, fs))
+    case False{}: KiCad.open.ready(False{}, cli, fs)
 
 # open a project's .kicad_pro in the bundled KiCad (its board or schematic
 # editor when there is no .kicad_pro), detached; answers "" or an error.

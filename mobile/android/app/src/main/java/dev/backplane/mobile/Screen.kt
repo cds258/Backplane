@@ -308,6 +308,9 @@ data class ThreadView(
     val todos: Todos? = null,
     // how many older entries the page leaves out (the "earlier" action shows more)
     val earlier: Int = 0,
+    // how many newer pages lie below the one shown (paged up into the
+    // history; the "later" action shows the next one down)
+    val later: Int = 0,
     // the menu under the toolbar's overflow, after the tools
     val menu: List<Tool> = emptyList(),
     val parent: Entry? = null,
@@ -541,6 +544,7 @@ private fun folderRows(a: JSONArray?) =
 
 private fun thread(o: JSONObject) = threadOf(o).copy(
     earlier = o.optInt("earlier", 0),
+    later = o.optInt("later", 0),
     menu = o.optJSONArray("menu").map(::tool),
     parent = o.optJSONObject("parent")?.let(::entry),
     subs = o.optJSONObject("subs")?.let { u ->

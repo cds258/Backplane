@@ -16,6 +16,7 @@ ROOTS = ("src/web/view.bend", "src/web/bots.bend")
 BRIDGES = (
     "src/server/thin-actor.bend",
     "src/server/thin-view.bend",
+    "src/server/thin-mirror.bend",
     "src/server/thin-sidebar.bend",
     "src/core/sidebar-drafts.bend",
 )

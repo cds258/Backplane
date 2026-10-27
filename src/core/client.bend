@@ -12998,6 +12998,19 @@ def Side.legacy.ids(ts: List<&2, M.Thread>, +q: String) -> List<&2, String>:
     case +t <> rest:
       List.append(&2, String, Side.when(Palette.hit(q, Active.title(t)), [M.Thread.id(t)]), Side.legacy.ids(rest, q))
 
+# One list for rendered rows and keyboard destinations, with no duplicate
+# legacy row when the remaining history is expanded or searched.
+def Side.legacy.filtered(ts: List<&2, M.Thread>, +q: String) -> List<&2, M.Thread>:
+  match ts:
+    case Nil{}: Nil{}
+    case +t <> rest:
+      ST.Tree.roots.add(Bool.not(Palette.hit(q, Active.title(t))), t, Side.legacy.filtered(rest, q))
+
+def Side.legacy.shown(+u: Ui) -> List<&2, String>:
+  List.append(&2, String, Side.legacy.ids(ST.Legacy.live(Ui.state(u), Ui.sel(u)), Ui.scratch(u, "@f.pq")),
+    Side.when(Bool.or(Ui.flag(u, "conversation-history"), Bool.not(String.is_empty(Ui.scratch(u, "@f.pq")))),
+      Side.legacy.ids(ST.Legacy.history(Ui.state(u), Ui.sel(u)), Ui.scratch(u, "@f.pq"))))
+
 def Side.visible.kind(active: Bool, +u: Ui) -> List<&2, String>:
   match active:
     case True{}:
@@ -13007,7 +13020,7 @@ def Side.visible.kind(active: Bool, +u: Ui) -> List<&2, String>:
 
 def Side.visible(+u: Ui) -> List<&2, String>:
   List.append(&2, String, Side.visible.kind(String.eq(Side.view(Ui.state(u)), "active"), u),
-    Side.when(Bool.or(Ui.flag(u, "conversation-history"), Bool.not(String.is_empty(Ui.scratch(u, "@f.pq")))), Side.legacy.ids(ST.Legacy.threads(Ui.state(u)), Ui.scratch(u, "@f.pq"))))
+    Side.legacy.shown(u))
 
 # Navigation counts exactly the current project's visible rows, in the
 # same order as the selected sidebar mode and its expanded branches.
@@ -13052,8 +13065,7 @@ def Side.here.kind(active: Bool, +u: Ui, +ix: SIx, +pid: String) -> List<&2, Str
 
 def Side.here.ix(+u: Ui, +ix: SIx) -> List<&2, String>:
   List.append(&2, String, Side.here.kind(String.eq(Side.view(Ui.state(u)), "active"), u, ix, Side.cur(u)),
-    Side.in_project(Side.when(Bool.or(Ui.flag(u, "conversation-history"), Bool.not(String.is_empty(Ui.scratch(u, "@f.pq")))),
-      Side.legacy.ids(ST.Legacy.threads(Ui.state(u)), Ui.scratch(u, "@f.pq"))), Ui.state(u), Side.cur(u)))
+    Side.in_project(Side.legacy.shown(u), Ui.state(u), Side.cur(u)))
 
 def Uber.chat.k(none: Bool, +u: Ui, id: String) -> Act:
   match none:

@@ -60,6 +60,8 @@ def main():
         run('stack',['bun','test/tools/js_stack_test.ts',binary])
         run('bun-effects',['scripts/js-effects-bun.sh',str(logs/'effects')])
         run('bake',['bun','test/tools/js_bake_test.ts'])
+        run('kicad-library-header',[sys.executable,'scripts/kicad-library-header.py',str(logs/'kicad-library.js')])
+        run('kicad-library',['bun','test/tools/kicad_library_test.ts',str(logs/'kicad-library.js')])
         run('producer-guards',[sys.executable,'test/tools/service_release_test.py'])
         run('reconnect',['bun','test/tools/reconnect_test.ts'])
         run('heartbeat',['bun','test/tools/thin_heartbeat_e2e.ts',binary])

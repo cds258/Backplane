@@ -12468,3 +12468,107 @@ law fq_room_keyed:
 # A copied home never drains queued calls to real machines.
 law queue_copy_refuses_network:
   {JCOPY.Copy.outs(True{}, [H.FarQueued{}]) == [] : List<&2, H.Out>}
+
+import ./src/server/thin-mirror.bend as TMR
+
+# ---- selected mirrored thin conversation ----
+law mirror_no_authority:
+  for mirrors: List<&2, FR.In>
+  for thread: String
+  {TMR.Mirror.get(False{}, mirrors, thread) == None{} : Maybe<&2, FR.In>}
+
+law mirror_no_source_state:
+  for st: M.State
+  for thread: String
+  {TMR.Mirror.state(st, None{}, thread) == st : M.State}
+
+law mirror_local_epoch:
+  for epoch: String
+  {TMR.Mirror.epoch(epoch, None{}) == epoch : String}
+
+law mirror_changed_basis_anchor:
+  {TMR.Mirror.anchor("old", "new", 37n) == 0n : Nat}
+# ---- end selected mirrored thin conversation ----
+
+import ./src/core/subthreads.bend as LEG
+
+law retired_scratch_launch_refused:
+  for s: M.State
+  for now: Nat
+  for thread: String
+  for by: String
+  for p: J.Json
+  {MC.Mcp.launch.retired_guard(True{}, s, now, thread, by, p) == MC.Res.fail(MC.Mcp.launch.retired_message()) : MC.Res}
+
+law retired_scratch_id:
+  {MC.Mcp.launch.retired_id("scratch") == True{} : Bool}
+
+law legacy_active_visible:
+  {LEG.Legacy.unsettled(M.Active{}) == True{} : Bool}
+
+import ./src/core/ref-origin.bend as O
+
+law ref_origin_no_link:
+  for s: String
+  {O.Origin.text_links(False{}, s, "") == s : String}
+
+law ref_origin_return_local:
+  {O.Origin.id("peer~t", "peer") == "t" : String}
+
+law ref_origin_owner_remote:
+  {O.Origin.id("t", "peer") == "peer~t" : String}
+
+law ref_origin_foreign_untouched:
+  {O.Origin.id("other~t", "peer") == "other~t" : String}
+
+# Boot-only decoded threads never cross a checkpoint mismatch.
+import ./src/server/hotboot.bend as BOOTWARM
+import ./src/core/snapshot.bend as BOOTSNAP
+law startup_warm_accepted:
+  for +w: BOOTWARM.Warm
+  for +rows: List<&2, List<&2, String>>
+  {BOOTWARM.Warm.choose(True{}, w, rows) == BOOTWARM.Warm.threads(w) : Map<&2, M.Thread>}
+law startup_warm_fallback:
+  for +w: BOOTWARM.Warm
+  for +rows: List<&2, List<&2, String>>
+  {BOOTWARM.Warm.choose(False{}, w, rows) == BOOTSNAP.Fill.threads(rows, Map.new(&2, M.Thread)) : Map<&2, M.Thread>}
+
+# Empty successful reports carry no outcome; real failures remain assessable.
+law mail_empty_success_quiet:
+  {H.Triage.bot.report(M.Completed{}, "") == False{} : Bool}
+law mail_failed_empty_preserved:
+  {H.Triage.bot.report(M.Failed{}, "") == True{} : Bool}
+law mail_no_triage_grants_outside_run:
+  {MDSP.Disposition.codex.triage(False{}) == [] : List<&2, String>}
+law mail_silent_bot_envelope:
+  for s: M.State
+  for now: Nat
+  for th: String
+  for text: String
+  {H.Triage.bot.file(False{}, s, now, th, text) == H.Step.none() : H.Step}
+
+# Provider retry visibility; never a new turn/action.
+
+law codex_error_notice_kind:
+  {H.Codex.kind("error") == 9n : Nat}
+law codex_error_notice_no_effects:
+  for s: M.State
+  for th: String
+  for now: Nat
+  for o: J.Json
+  {H.Step.outs_of(H.Codex.error.step(s, th, now, o)) == [] : List<&2, H.Out>}
+
+# A distinct owned identity starts new work even while the turn runs.
+law life_fresh_owned_wakes:
+  {H.Shelve.step(H.Shelve.demo([M.ThreadSettled{"t1", True{}, 3n}]), [M.WorkSet{"t1", "bg", "new\tx", 4n}]) == [M.ThreadWoke{"t1", 4n}] : List<&2, M.Change>}
+
+# Updating that same job is progress, not a new start.
+law life_owned_progress_held:
+  {H.Shelve.step(H.Shelve.demo([M.WorkSet{"t1", "bg", "old\tx", 2n}, M.ThreadSettled{"t1", True{}, 3n}]), [M.WorkSet{"t1", "bg", "old\tmore", 4n}]) == [] : List<&2, M.Change>}
+
+law life_fresh_child_wakes:
+  {H.Shelve.step(H.Shelve.demo([M.ThreadSettled{"t1", True{}, 3n}]), [M.TaskDelegated{"k1", "t1", "child", 1n, "codex", "", 4n}]) == [M.ThreadWoke{"t1", 4n}] : List<&2, M.Change>}
+
+# The person's later settle is authoritative within a transaction too.
+law life_later_manual_settle_held:
+  {H.Shelve.step(H.Shelve.demo([]), [M.WorkSet{"t1", "bg", "new\tx", 4n}, M.ThreadSettled{"t1", True{}, 4n}]) == [] : List<&2, M.Change>}

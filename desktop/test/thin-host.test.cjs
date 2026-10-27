@@ -58,6 +58,74 @@ test('scrolling pages: one page request at a time, and a failed one puts the tra
  const f=await fixture();f.open();assert.equal(f.host.page(),true);const req=f.sent.at(-1);assert.equal(f.host.page(),false,'a second older page waits for the first');assert.equal(f.host.newer(),false,'and so does a newer one');
  f.host.receive({t:'reply',id:req.id,ok:false,error:{code:'STALE_CURSOR',message:'stale'}});assert.equal(f.host.atNewest(),true,'the failed page leaves the trail as it was');assert.equal(f.host.paging,null,'and no page is waited for');
 });
+test('history recovery: failed page keeps the validated picture, draft and actions usable until explicit retry',async()=>{
+ const states=[],f=await fixture({pageState:s=>states.push(s)});f.open();const before=f.views.length;
+ f.host.page();const req=f.sent.at(-1);assert.deepEqual(req.p.anchor,{id:'row',offset:0});
+ f.host.receive({t:'reply',id:req.id,ok:false,error:{code:'UNAVAILABLE'}});
+ assert.equal(f.host.ready,true);assert.equal(f.views.length,before);assert.equal(f.getSession().drafts.A,'original 日本語');assert.equal(states.at(-1).phase,'error');
+ f.host.request('draft','new unsent');f.host.request('stop','');assert.equal(f.sent.at(-1).p.action,'stop');f.host.receive(f.reply());
+ assert.equal(f.host.retryPage(),true);assert.equal(f.sent.at(-1).p.cursor,req.p.cursor);f.host.receive(f.reply());
+ assert.equal(f.host.pageError,null);assert.equal(f.getSession().drafts.A,'new unsent');
+});
+test('history recovery: timeout restores the trail; late timed-out reply cannot move the page',async()=>{
+ const f=await fixture();f.open();f.host.page();const req=f.sent.at(-1),before=f.views.length;f.tick(5001);
+ assert.equal(f.host.ready,true);assert.equal(f.host.atNewest(),true);assert.equal(f.host.paging,null);assert.equal(f.host.pageError.direction,'older');
+ assert.equal(f.host.receive(f.reply(req)),false);assert.equal(f.views.length,before);assert.equal(f.host.retryPage(),true);
+});
+test('history ordering: notifications and draft refresh wait behind one page, then use the accepted page',async()=>{
+ const f=await fixture();f.open();f.host.page();const req=f.sent.at(-1),count=f.sent.length;
+ f.host.update();f.host.receive({t:'view.changed',version:1,generation:'7',epoch:'actual',viewId:'view-A',target:{kind:'thread',id:'A'},viewRevision:'2'});
+ assert.equal(f.sent.length,count);f.host.request('draft','typing while paging');f.host.receive(f.reply(req));
+ assert.equal(f.sent.at(-1).m,'view.update');assert.equal(f.sent.at(-1).p.session.drafts.A,'typing while paging');
+});
+test('history ordering: Stop can overtake a page without losing its accepted cursor or the stop',async()=>{
+ const f=await fixture();f.open();f.host.page();const req=f.sent.at(-1);f.host.request('stop','');const stop=f.sent.at(-1);
+ f.host.receive(f.reply(req));assert.equal(f.host.atNewest(),false);assert.equal(f.host.cursor,req.p.cursor);
+ f.host.receive(f.reply(stop));assert.equal(f.host.ready,true);assert(f.sent.some(r=>r.p.action==='stop'));
+});
+test('history progress: identical next cursor never triggers an overlap request loop',async()=>{
+ const f=await fixture();f.open();f.host.page();f.host.receive(f.reply());const count=f.sent.length;
+ assert.equal(f.host.page(),false);assert.equal(f.sent.length,count);
+});
+test('history identity: returning to a conversation restores its issued page before presenting, with its own draft and anchor',async()=>{
+ const position={top:1100,atEnd:false,anchor:'row',offset:-37};
+ const f=await fixture({pagePosition:()=>({position})});f.open();f.host.page();const page=f.sent.at(-1);f.host.receive(f.reply(page));
+ f.host.request('select','B');f.host.receive(f.reply());f.host.request('draft','B only');const count=f.views.length;
+ f.host.request('select','A');f.host.receive(f.reply());assert.equal(f.sent.at(-1).m,'view.page');assert.equal(f.sent.at(-1).p.cursor,page.p.cursor);
+ assert.equal(f.views.length,count,'newest page is never flashed');f.host.receive(f.reply());
+ assert.equal(f.host.atNewest(),false);assert.deepEqual(f.views.at(-1).detail.position,position);assert.equal(f.getSession().drafts.A,'original 日本語');assert.equal(f.getSession().drafts.B,'B only');
+});
+test('history identity: a reader in the outgoing newer bridge restores its adjacent page',async()=>{
+ let adjacent='';const f=await fixture({pagePosition:()=>({position:{anchor:'row',atEnd:false,offset:0},adjacent})});f.open();
+ f.host.page();f.host.receive(f.reply(undefined,{window:{ids:['row'],older:'next',hasMore:true,anchor:{id:'row',offset:0},partial:[]}}));f.host.page();f.host.receive(f.reply());
+ adjacent='newer';f.host.request('select','B');f.host.receive(f.reply());adjacent='';f.host.request('select','A');f.host.receive(f.reply());
+ assert.equal(f.sent.at(-1).p.cursor,'older-bound-to-A');f.host.receive(f.reply());assert.equal(f.host.back.length,1);
+});
+test('history identity: bookmarks are limited to eight conversations and 64KiB',async()=>{
+ const f=await fixture({pagePosition:()=>({position:{anchor:'row',atEnd:false,offset:0}})});f.open();
+ for(let i=0;i<20;i++){f.host.request('select','thread-'+i);f.host.receive(f.reply());}
+ assert.equal(f.host.pagePositions.size,8);assert(f.host.pagePositionBytes<=65536);
+});
+test('history identity: a failed restore retries its exact saved page, never the newest page cursor',async()=>{
+ const f=await fixture({pagePosition:()=>({position:{anchor:'row',atEnd:false,offset:-5}})});f.open();f.host.page();f.host.receive(f.reply());
+ f.host.request('select','B');f.host.receive(f.reply());f.host.request('select','A');f.host.receive(f.reply());const restore=f.sent.at(-1);
+ f.host.receive({t:'reply',id:restore.id,ok:false,error:{code:'UNAVAILABLE'}});assert.equal(f.host.pageError.direction,'restore');assert.equal(f.host.retryPage(),true);
+ assert.equal(f.sent.at(-1).p.cursor,restore.p.cursor);f.host.receive(f.reply());assert.equal(f.views.at(-1).detail.position.offset,-5);
+});
+test('history identity: changed resolved conversation rejects the bookmark after fresh selection',async()=>{
+ const f=await fixture({pagePosition:()=>({position:{anchor:'row',atEnd:false,offset:-5}})});f.open();f.host.page();f.host.receive(f.reply());
+ f.host.request('select','B');f.host.receive(f.reply());f.host.request('select','A');const open=f.sent.at(-1);
+ f.host.receive(f.reply(open,{session:{...open.p.session,sel:'resolved-other'}}));assert.equal(f.sent.at(-1).m,'view.open');assert.equal(f.host.atNewest(),true);assert.equal(f.host.ready,true);assert.equal(f.views.at(-1).detail.position,undefined);
+});
+test('history identity: stale saved cursor is discarded and selects fresh without disabling the conversation',async()=>{
+ const f=await fixture({pagePosition:()=>({position:{anchor:'row',atEnd:false,offset:-5}})});f.open();f.host.page();f.host.receive(f.reply());
+ f.host.request('select','B');f.host.receive(f.reply());f.host.request('select','A');f.host.receive(f.reply());const restore=f.sent.at(-1);
+ f.host.receive({t:'reply',id:restore.id,ok:false,error:{code:'STALE_CURSOR'}});assert.equal(f.sent.at(-1).m,'view.open');f.host.receive(f.reply());
+ assert.equal(f.host.ready,true);assert.equal(f.host.atNewest(),true);assert.equal(f.host.pageError,null);assert(!f.states.some(s=>s.phase==='error'));
+});
+test('history identity: oversized trails are never retained in conversation bookmarks',async()=>{
+ const f=await fixture({pagePosition:()=>({position:{anchor:'row',atEnd:false,offset:0}})});f.open();f.host.back=Array(513).fill('issued-cursor');f.host.rememberPage();assert.equal(f.host.pagePositions.size,0);
+});
 test('scrolling pages: older pages are retraced back down to the newest, and a send returns there',async()=>{
  const f=await fixture();f.open();assert.equal(f.host.atNewest(),true);assert.equal(f.host.newer(),false);
  f.host.page();assert.equal(f.sent.at(-1).p.cursor,'older-bound-to-A');assert.equal(f.host.atNewest(),false);

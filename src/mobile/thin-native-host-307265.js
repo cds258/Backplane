@@ -19,6 +19,11 @@ export function inertAncillary307265(envelope) {
   if (!plainObject(envelope)) return false;
   const keys = Reflect.ownKeys(envelope);
   if (envelope.t === 'hb') return keys.length === 1 && keys[0] === 't';
+  // a 3D model's note (server plot.bend's Pv.note: parts with no model) to
+  // the phones watching it: not a view frame. Taken for a stray frame it
+  // failed the view once a model loaded, and every tap after was dropped.
+  if (envelope.t === 'plotnote') return keys.every(k => k === 't' || k === 'key' || k === 'text') &&
+    typeof envelope.key === 'string' && typeof envelope.text === 'string' && utf8Bytes(JSON.stringify(envelope)) <= 65536;
   if (envelope.t !== 'info' || keys.length !== 2 || !keys.includes('t') || !keys.includes('info') || !plainObject(envelope.info)) return false;
   const info = Reflect.ownKeys(envelope.info);
   return info.length === 2 && info.includes('pair') && info.includes('pair.qr') &&
@@ -34,7 +39,12 @@ export function validateNativeResult307265(result, input) {
     if (result.cmds.some(c => (c.type === 'keep' && rawThread(input.hub, c.thread) === null) ||
         (c.type === 'later' && rawThread(input.hub, c.value) === null))) return false;
     if (result.session.route !== undefined && !compactRoute(result.session.route, result.nextTarget || input.target)) return false;
-    if (result.nextTarget) return viewTarget(result.nextTarget) && !same(result.nextTarget, input.target) && typeof input.action === 'string' &&
+    // A navigation answers the person's action, or the update that follows
+    // its ordinary request (a new thread or fork: thread.create's answer,
+    // then view.update names the thread). Refusing the second failed the
+    // view: "New thread" waited for good and nothing applied after it.
+    if (result.nextTarget) return viewTarget(result.nextTarget) && !same(result.nextTarget, input.target) &&
+      (typeof input.action === 'string' || typeof input.viewRevision === 'string') &&
       result.remoteReady === false && !Object.prototype.hasOwnProperty.call(result, 'shown');
     const w = result.window, str = (s, limit = 1024) => typeof s === 'string' && utf8Bytes(s) <= limit;
     if (!object(w) || !Array.isArray(w.ids) || w.ids.length > 32 || w.ids.some(id => !str(id) || !id) || new Set(w.ids).size !== w.ids.length ||
@@ -104,6 +114,10 @@ export class NativeThinHost307265 {
       session.drafts = { ...session.drafts, ...Object.fromEntries([...drafts].map(([thread, d]) => [thread, d.text])) };
       value = { hub, session, target: this.api.target(session), anchor: { id: '', offset: 0 },
         mode: '', epoch: '', greeted: false, ready: false, shown: null, window: null,
+        // history pages (as the web's thin-host): the cursor shown ('' the
+        // newest), the cursors that led here, the one page on its way, and
+        // pages a send overtook (their replies are dropped)
+        cursor: '', back: [], paging: null, overtaken: new Set(),
         revision: 0, drafts, queue: [], active: null, messages: new MessageParts(), findRevision: 0, findCloseOnce: false, registrations: new Map() };
       this.states.set(hub, value);
     }
@@ -246,8 +260,17 @@ export class NativeThinHost307265 {
     return true;
   }
 
+  pageTo(s, cursor, back) {
+    const undo = { cursor: s.cursor, back: s.back };
+    const result = this.client.request(s.hub, 'view.page', { cursor, session: this.requestSession(s.session, 'view.page', s.target) });
+    s.cursor = cursor; s.back = back;
+    if (!this.issue(s, result) || !result?.id) { s.cursor = undo.cursor; s.back = undo.back; return; }
+    s.paging = { id: result.id, undo };
+  }
+
   select(s, target, session) {
     s.target = copy(target); s.session = copy(session); s.window = null;
+    s.cursor = ''; s.back = []; s.paging = null;
     s.queue = []; s.messages.clear();
     return this.issue(s, this.client.select(s.hub, s.target, this.requestSession(s.session, 'view.open', s.target), this.api.cid()));
   }
@@ -290,8 +313,15 @@ export class NativeThinHost307265 {
       return true;
     }
     if (!s.greeted || !s.ready) return true;
+    // One page request at a time, each taken from the page shown. 'later'
+    // retraces the trail back down to the newest: without it a phone that
+    // paged up could never page back down (the list ended on the old page)
     if (intent.kind === 'page') {
-      if (s.window?.hasMore && s.window.older) this.issue(s, this.client.request(hub, 'view.page', { cursor: s.window.older, session: this.requestSession(s.session, 'view.page', s.target) }));
+      if (!s.paging && s.window?.hasMore && s.window.older) this.pageTo(s, s.window.older, [...s.back, s.cursor]);
+      return true;
+    }
+    if (intent.kind === 'later') {
+      if (!s.paging && s.back.length) this.pageTo(s, s.back[s.back.length - 1], s.back.slice(0, -1));
       return true;
     }
     if (intent.kind === 'search') {
@@ -311,6 +341,8 @@ export class NativeThinHost307265 {
     if (intent.kind !== 'action' || s.queue.length >= 7) return true;
     const thread = s.session.sel;
     if (['send', 'send-alt'].includes(action)) {
+      if (s.paging) s.overtaken.add(s.paging.id);
+      s.cursor = ''; s.back = []; s.paging = null;
       const draft = s.drafts.get(thread)?.revision || 0;
       const active = this.pending.get(s.active)?.operation;
       if ([active, ...s.queue].some(op => op && ['send', 'send-alt'].includes(op.action) && op.input.sel === thread && op.revision >= draft)) return true;
@@ -357,6 +389,10 @@ export class NativeThinHost307265 {
     if (!result) return this.ack(hub, envelope);
     this.pending.delete(envelope.id);
     if (s.active === envelope.id) s.active = null;
+    const paged = s.paging?.id === envelope.id ? s.paging : null;
+    if (paged) s.paging = null;
+    if (s.overtaken.delete(envelope.id)) return true;
+    if (paged && result.failed) { s.cursor = paged.undo.cursor; s.back = paged.undo.back; }
     if (!metadata || metadata.epoch !== s.epoch) return true;
     if (result.failed) {
       if (presentation(result.method) && this.isCurrent(metadata)) this.fail(hub, result.failed);
@@ -430,6 +466,7 @@ export class NativeThinHost307265 {
         const old = s.shown?.thread?.entries?.find(e => e.id === entry.id);
         if (old?.partial?.version !== entry.partial?.version) s.messages.reset(entry.id);
       }
+      if (view.shown?.thread) view.shown.thread.later = s.back.length;
       s.shown = view.shown; s.overlay = view.overlay;
       if (!s.flushed) { s.flushed = true; this.outboxFlush(hub); }
       this.sync.push({ hub, phase: 'presented', detail: 'view-v1', mode: 'view-v1', viewId: r.viewId,
@@ -454,6 +491,18 @@ export class NativeThinHost307265 {
       s.session.drafts = { ...s.session.drafts, [original.thread]: text };
       s.drafts.set(original.thread, { revision: original.revision, text });
     }
+    // As the web's thin-host: the answer applies to the session as it is now
+    // (a new thread or fork's answer selects it and ends the wait). Taking
+    // only its drafts left wantNew set: a "New thread" page that waited for
+    // good, and every view after it asked for that wait again.
+    const before = s.session, next = this.api.ack(s.session, envelope);
+    // the client's own state ('@' keys: the wait is "@want.new") from the
+    // answer, the person's thread drafts as they are now
+    const drafts = Object.fromEntries([...Object.entries(before.drafts || {}).filter(([k]) => !k.startsWith('@')),
+      ...Object.entries(next.drafts || {}).filter(([k]) => k.startsWith('@'))]);
+    s.session = { ...next, rid: Math.max(before.rid, next.rid || 0), drafts };
+    if (next.sel && next.sel !== before.sel) this.select(s, this.api.target(s.session), s.session);
+    else if (next.wantNew !== before.wantNew) this.update(s);
     for (const call of this.ordinary.values()) if (call.hub === hub) call.session = this.api.ack(call.session, envelope);
     for (const call of this.pending.values()) if (call.hub === hub) {
       if (call.acks.length >= 128) { this.fail(hub, 'Ordinary reply backlog limit'); break; }

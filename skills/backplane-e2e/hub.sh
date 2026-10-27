@@ -19,7 +19,7 @@
 # BP_E2E_FIXTURE  a KiCad project folder (default /usr/share/kicad/demos/ecc83);
 #                 its top-level KiCad files are copied, nothing else
 # BP_E2E_ROOT     scratch root (default ${TMPDIR:-/tmp}/bp-e2e)
-# BP_E2E_STREAM   stand-in reply: deltas per turn (60) and ms apart (50)
+# BP_E2E_STREAM   stand-in reply: "N [MS]", deltas per turn (60) and ms apart (50)
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -75,10 +75,11 @@ start() {
   port=$(cat "$root/port")
   set -- "$bin" --home "$root/home" --port "$port" --no-tailscale --foreground
   [ -d "$web" ] && set -- "$@" --web "$web"
-  n=${BP_E2E_STREAM:-60}
+  n=${BP_E2E_STREAM:-60}; ms=50
+  case $n in *" "*) ms=${n#* }; n=${n%% *};; esac
   env HOME="$root/userhome" PATH="$root/fake:$PATH" DISPLAY= WAYLAND_DISPLAY= BACKPLANE_NO_UPDATE=1 BACKPLANE_PEERS= \
-    BACKPLANE_AGENTS="$root/fake" BACKPLANE_VAULT_KEYRING=file BP_STANDIN_MODE=stream BP_STREAM_N="${n%% *}" \
-    BP_STREAM_MS=50 BP_STREAM_SEP="
+    BACKPLANE_AGENTS="$root/fake" BACKPLANE_VAULT_KEYRING=file BP_STANDIN_USAGE=1 BP_STANDIN_MODE=stream BP_STREAM_N="$n" \
+    BP_STREAM_MS="$ms" BP_STREAM_SEP="
 " "$@" > "$root/hub.log" 2>&1 &
   echo $! > "$root/pid"
   i=0; until curl -s -o /dev/null "http://127.0.0.1:$port/hello"; do i=$((i+1)); [ $i -lt 100 ] || { echo "hub did not start; see $root/hub.log" >&2; exit 1; }; sleep 0.2; done

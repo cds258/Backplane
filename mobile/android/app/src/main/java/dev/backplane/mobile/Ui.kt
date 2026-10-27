@@ -885,7 +885,8 @@ fun ThreadScreen(m: AppModel, s: Screen, t: ThreadView, below: (@Composable () -
     }
     Errors(m, s, snacks)
     val count = (if (t.parent != null) 1 else 0) +
-        (if (t.earlier > 0) 1 else 0) + t.entries.size + t.sending.size + (if (t.live.isNotEmpty() || t.working.isNotEmpty()) 1 else 0)
+        (if (t.earlier > 0) 1 else 0) + t.entries.size + t.sending.size + (if (t.live.isNotEmpty() || t.working.isNotEmpty()) 1 else 0) +
+        (if (t.later > 0) 1 else 0)
     LaunchedEffect(t.id, m.scrolls) { if (count > 0) list.scrollToItem(count - 1) }
     // earlier entries shown: the view goes back to the entry that was first
     var keepAt by remember { mutableStateOf<String?>(null) }
@@ -898,7 +899,9 @@ fun ThreadScreen(m: AppModel, s: Screen, t: ThreadView, below: (@Composable () -
     }
     LaunchedEffect(count, t.live) {
         val last = list.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-        if (count > 0 && last >= count - 3) list.animateScrollToItem(count - 1)
+        // an earlier page's end is not the thread's: it holds (the next page
+        // down comes by scrolling on)
+        if (count > 0 && last >= count - 3 && t.later == 0) list.animateScrollToItem(count - 1)
     }
     // the design history's way back: the entry scrolled to (near the top)
     // and tinted, the tint fading out; after the rows the jump opened are laid out
@@ -1119,6 +1122,16 @@ fun ThreadScreen(m: AppModel, s: Screen, t: ThreadView, below: (@Composable () -
                     else EntryRow(m, e) { u -> shown = u }
                     e.partial?.let { PartialMessageFooter(m, s.hub, t.id, e.id, it) }
                 }
+            }
+            // on an earlier page, scrolled down to its end: the next page down
+            // (as "earlier" at the top; the list keeps its place by entry key)
+            if (t.later > 0) item(key = "later:" + (t.entries.lastOrNull()?.id ?: "") + ":" + t.later) {
+                LaunchedEffect(m.contentReady, s.hub, t.id) {
+                    snapshotFlow { userDragging && !pageAcceptedForDrag && m.contentReady && m.screen?.hub == s.hub && m.screen?.thread?.id == t.id }.first { it }
+                    pageAcceptedForDrag = true
+                    keepAt = t.entries.lastOrNull()?.id; m.act("later", "")
+                }
+                Spacer(Modifier.size(1.dp))
             }
             itemsIndexed(t.sending, key = { i, _ -> "sending:$i" }) { _, text -> SendingView(text) }
             if (t.live.isNotEmpty()) item(key = "live") { Markdown(t.live) }

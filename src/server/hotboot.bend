@@ -104,6 +104,31 @@ def Hot.stale(+m: Map<&2, String>) -> String:
   Bool.pick(String, Bool.not(String.eq(codec, Nat.show(SDB.Sdb.codec()))), "store.db codec " ++ codec ++ " is not " ++ Nat.show(SDB.Sdb.codec()),
     Bool.pick(String, Bool.or(String.is_empty(Hot.get(m, "applied_off")), String.is_empty(Hot.get(m, "applied_seq"))), "store.db has no applied_off/applied_seq", ""))
 
+# A boot-local handoff from durable catch-up. Reuse only at the same
+# home and exact validated checkpoint; no process-global or persisted cache.
+type Warm is Data:
+  Warm{home: String, seq: String, off: String, log: String, threads: Map<&2, M.Thread>}
+
+def Warm.matches(w: Warm, +home: String, +m: Map<&2, String>) -> Bool:
+  match w:
+    case Warm{h, seq, off, log, _}:
+      Bool.and(String.eq(h, home), Bool.and(String.eq(seq, Hot.get(m, "applied_seq")),
+        Bool.and(String.eq(off, Hot.get(m, "applied_off")), String.eq(log, Hot.get(m, "log_id")))))
+
+def Warm.threads(w: Warm) -> Map<&2, M.Thread>:
+  match w:
+    case Warm{_, _, _, _, threads}: threads
+
+def Warm.choose(same: Bool, w: Warm, rows: List<&2, List<&2, String>>) -> Map<&2, M.Thread>:
+  match same:
+    case True{}: Warm.threads(w)
+    case False{}: SN.Fill.threads(rows, Map.new(&2, M.Thread))
+
+def Warm.decode(w: Maybe<&2, Warm>, +home: String, +m: Map<&2, String>, rows: List<&2, List<&2, String>>) -> Map<&2, M.Thread>:
+  match w:
+    case None{}: SN.Fill.threads(rows, Map.new(&2, M.Thread))
+    case Some{+v}: Warm.choose(Warm.matches(v, home, m), v, rows)
+
 # The open threads
 # ----------------
 
@@ -385,10 +410,10 @@ def Hot.lined(same: Bool, +h: String, +home: String, +ids: List<&2, J.Json>, +re
         +more : List<&2, J.Json> = Hot.missed(THIN.State.threads(Hot.ld.st(ld)), Hot.had(ids, Map.new(&2, Bool)), Nil{})
         Hot.again(List.is_empty(&2, J.Json, more), h, ids, more, recs, threads, ld, ST.Store.read.body(rd), ST.Store.read.tail(rd), ls, reps, seq)
 
-def Hot.read(+h: String, +home: String, +m: Map<&2, String>, +size: U32) -> IO(Hot):
+def Hot.read(+h: String, +home: String, +m: Map<&2, String>, +size: U32, warm: Maybe<&2, Warm>) -> IO(Hot):
   do IO<Hot>:
     +recs : Map<&2, List<&2, List<&2, String>>> <- Hot.read.recs(h)
-    +threads : Map<&2, M.Thread> = SN.Fill.threads(SN.SRows.of(SN.SRows{recs}, "thread"), Map.new(&2, M.Thread))
+    +threads : Map<&2, M.Thread> = Warm.decode(warm, home, m, SN.SRows.of(SN.SRows{recs}, "thread"))
     +ids : List<&2, J.Json> = Hot.ids.decoded(Map.to_list(&2, M.Thread, threads), Nil{})
     +rows : SN.SRows <- Hot.read.open(h, J.Json.show(J.Json.arr(ids)), recs)
     +seq : Nat = SN.Snap.num(Hot.get(m, "applied_seq"), 0n)
@@ -423,19 +448,19 @@ def Hot.head.k(r: Result<&1, &1, U32 & String, File>) -> IO(List<&2, U32>):
 def Hot.head(path: String) -> IO(List<&2, U32>):
   IO.bind(Result<&1, &1, U32 & String, File>, List<&2, U32>, File.open(path, "r"), Hot.head.k)
 
-def Hot.checked.k(fine: Bool, +why: String, +h: String, +home: String, +m: Map<&2, String>, +size: U32) -> IO(Hot):
+def Hot.checked.k(fine: Bool, +why: String, +h: String, +home: String, +m: Map<&2, String>, +size: U32, warm: Maybe<&2, Warm>) -> IO(Hot):
   match fine:
     case True{}:
-      Hot.read(h, home, m, size)
+      Hot.read(h, home, m, size, warm)
     case False{}:
       do IO<Hot>:
         cl : String <- D.Db.close(h)
         return Hot.no(why)
 
-def Hot.checked(+why: String, +h: String, +home: String, +m: Map<&2, String>, +size: U32) -> IO(Hot):
-  Hot.checked.k(String.is_empty(why), why, h, home, m, size)
+def Hot.checked(+why: String, +h: String, +home: String, +m: Map<&2, String>, +size: U32, warm: Maybe<&2, Warm>) -> IO(Hot):
+  Hot.checked.k(String.is_empty(why), why, h, home, m, size, warm)
 
-def Hot.opened(ok: Bool, +h: String, +o: String, +home: String) -> IO(Hot):
+def Hot.opened(ok: Bool, +h: String, +o: String, +home: String, warm: Maybe<&2, Warm>) -> IO(Hot):
   match ok:
     case False{}:
       IO.pure(Hot, Hot.no("store.db: " ++ o))
@@ -445,19 +470,23 @@ def Hot.opened(ok: Bool, +h: String, +o: String, +home: String) -> IO(Hot):
         +m : Map<&2, String> = Hot.meta.go(meta, Map.new(&2, String))
         +size : U32 <- Hot.size(Hot.log(home))
         hd : List<&2, U32> <- Hot.head(Hot.log(home))
-        Hot.checked(Hot.check(m, size, SDB.Sdb.log_id(hd)), h, home, m, size)
+        Hot.checked(Hot.check(m, size, SDB.Sdb.log_id(hd)), h, home, m, size, warm)
 
-def Hot.load.k(there: Bool, +home: String) -> IO(Hot):
+def Hot.load.k(there: Bool, +home: String, warm: Maybe<&2, Warm>) -> IO(Hot):
   match there:
     case False{}:
       IO.pure(Hot, Hot.no("no store.db"))
     case True{}:
       do IO<Hot>:
         +o : String <- D.Db.open(Hot.path(home))
-        Hot.opened(String.starts_with(o, "ok "), String.drop(o, 3n), o, home)
+        Hot.opened(String.starts_with(o, "ok "), String.drop(o, 3n), o, home, warm)
 
 # the read model from home's store.db and its log's tail, or why not
-def Hot.load(+home: String) -> IO(Hot):
+def Hot.load.warm(+home: String, warm: Maybe<&2, Warm>) -> IO(Hot):
   do IO<Hot>:
     there : Bool <- Hot.exists(Hot.path(home))
-    Hot.load.k(there, home)
+    Hot.load.k(there, home, warm)
+
+# Existing callers have no boot handoff.
+def Hot.load(home: String) -> IO(Hot):
+  Hot.load.warm(home, None{})

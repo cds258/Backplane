@@ -12,14 +12,14 @@ snapshot), stand-in agents only.
 ## Getting started
 
 **S01 First run** (W D A)
-Open the hub fresh. The guided tour shows; Skip closes it. Settings → About →
+Open the hub fresh. The guided tour shows; Skip closes it. Settings → Tour →
 Show the tour opens it again; Done closes it and it stays closed after a
 reload.
 
 **S02 Add a project** (W D)
 Sidebar `+` → enter a folder path (a copy of the fixture) → Add. The project
-appears in the sidebar with a new thread selected, and the viewer opens on
-its board.
+appears in the sidebar with a new thread selected; pressing Board draws its
+board.
 
 **S03 Find a project or conversation** (W D A)
 Type part of a project name in the sidebar search: only matching projects
@@ -39,8 +39,10 @@ Send a message; while the reply streams press Stop. The turn ends as
 stopped within 2 s, and the composer takes a new message that then runs.
 
 **S06 Follow-ups while busy** (W D)
-Send a message, and while it runs send a second. The second waits in the
-queue (shown above the composer), then runs by itself after the first ends.
+Send a message, and while it runs send a second (Send reads "Steer" while a
+turn runs). The second is taken at once and answered after the first reply,
+which keeps streaming in place (it does not jump). Ctrl+Enter queues it
+instead: it waits above the composer, then runs by itself.
 
 **S07 Long history** (W D A)
 `hub.sh long` makes an 80-exchange thread. Open it: it opens at the newest
@@ -111,16 +113,18 @@ a double-click resets it. Close the viewer; open it again from the rail.
 
 **S20 Appearance** (W D A)
 Settings → Appearance: switch the theme (applies at once), the text size
-(text grows), the language to 日本語 (labels change) and back, and the
-sidebar to Active (one list of live threads).
+(text grows), the language to 日本語 where it is offered (labels change; on
+the web it is a preview, opened with `?lang=ja`) and back, and the sidebar
+to Active (one list of live threads).
 
 **S21 Folding the sidebars** (W D)
 Ctrl+B (Cmd+B) folds the sidebar to a strip and back; the rail's chevron makes
 the rail icons only. Both stay after a reload.
 
 **S22 Command palette and shortcuts** (W D)
-Ctrl+K opens the palette; typing filters; Enter runs "New thread". Ctrl+N makes
-a thread, Ctrl+J opens the floating terminal (it runs `echo hi`), Ctrl+1 jumps
+With a thread open: Ctrl+K opens the palette; typing filters; Enter runs
+"New thread". Ctrl+N makes a thread in the open thread's project (with none
+open it goes to the uberbot's chat), Ctrl+J opens the floating terminal (it runs `echo hi`), Ctrl+1 jumps
 to the first thread, Ctrl+Shift+S settles it.
 
 **S23 API keys** (W D A)

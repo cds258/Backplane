@@ -6,6 +6,7 @@
 // is dumb).
 
 import App from "./app.bend";
+import { installImageActions } from "./image-actions.js";
 import { BubMoveObserver, showBubMove } from "./bub-move.js";
 const bubMoves = new BubMoveObserver((before, after) => Wire.plain(App.bub_move(JSON.stringify(before), JSON.stringify(after))));
 function bubMoveSync() {
@@ -201,8 +202,8 @@ function expand(k) {
 }
 function memoSweep() {
   memoGen += 1;
-  if (MEMO.size < 2000) return;
-  for (const [id, m] of MEMO) if (memoGen - m.gen > 200) MEMO.delete(id);
+  if (MEMO.size < 512) return;
+  for (const [id, m] of MEMO) if (memoGen - m.gen > 8) MEMO.delete(id);
 }
 
 function same(a, b) {
@@ -436,17 +437,139 @@ let queued = false;
 let scroll = false;
 let focus = null;
 let jump = null;
+// a search result opened: its entry, brought into view and flashed once its
+// thread shows it, paging back through the history while it is not there
+// yet (at most 40 pages)
+let searchJump = null;
 let earlierAsked = false;
+
+// Keep just the outgoing canonical page beside the incoming one. The server
+// still owns a 32-entry window; this small visual overlap prevents pruning a
+// visible message when a page is short, a tool run is folded, or the viewport
+// is taller than half a page. It never becomes session or request authority.
+let historyBase = null, historySpare = [], historyPage = null, historyRestored = null;
+let historyStatus = null;
+const historyBridges = new Map();let historyBridgeBytes = 0;
+function historyBridgeKey(target = thin?.target, conversation = thin?.conversation) {
+  return JSON.stringify([location.origin, cacheIdentity(document.cookie), App.lang(ui), thin?.epoch, target, conversation]);
+}
+function historyRememberBridge() {
+  const key = historyBridgeKey(), old = historyBridges.get(key);
+  if (old) { historyBridgeBytes -= old.bytes;historyBridges.delete(key); }
+  if (!historySpare.length) return;
+  const base = (historyBase || []).filter(historySnapshotRow), spare = historySpare.filter(historySnapshotRow);
+  const rows = historySpare.direction === "older" ? [...base, ...spare] : [...spare, ...base];
+  const bytes = new TextEncoder().encode(JSON.stringify(rows)).length;
+  if (bytes > 512 * 1024) return;
+  historyBridges.set(key, { rows, bytes });historyBridgeBytes += bytes;
+  while (historyBridges.size > 8 || historyBridgeBytes > 512 * 1024) {
+    const oldest = historyBridges.keys().next().value;historyBridgeBytes -= historyBridges.get(oldest).bytes;historyBridges.delete(oldest);
+  }
+}
+function historyRestoreBridge(detail) {
+  if (!detail.position) return;
+  const saved = historyBridges.get(historyBridgeKey(detail.target));
+  if (saved) { historyRestored = saved.rows;historyPage = null; }
+}
+function historyClear() {
+  historyBase = null;historySpare = [];historyPage = null;historyRestored = null;
+  olderGestureUntil = newerGestureUntil = 0;stationaryPages = 0;
+  historyPageState(null);
+}
+function historyPageState(state) {
+  historyStatus = state;
+  let el = document.getElementById("history-status");
+  if (!state) { el?.remove();return; }
+  if (!el) { el = document.createElement("div");el.id = "history-status";document.body.appendChild(el); }
+  el.setAttribute("role", "status");
+  el.style.cssText = "position:fixed;z-index:12;max-width:calc(100vw - 32px);background:var(--panel);color:var(--text);border:1px solid var(--line);padding:4px 8px;font-size:12px";
+  const box = document.getElementById("timeline")?.getBoundingClientRect();
+  el.style.top = Math.max(0, box?.top || 0) + "px";el.style.right = Math.max(8, innerWidth - (box?.right || innerWidth) + 8) + "px";
+  el.replaceChildren(document.createTextNode(state.phase === "error" ? "Messages couldn’t load. " : state.direction === "newer" ? "Loading newer messages…" : "Loading earlier messages…"));
+  if (state.phase === "error") {
+    olderGestureUntil = newerGestureUntil = 0;earlierAsked = laterAsked = false;
+    const button = document.createElement("button");button.textContent = "Retry";
+    button.onclick = () => { const tl = document.getElementById("timeline");if (tl) { held = anchorOf(tl);heldSize = holdSize(tl); }thin?.retryPage(); };
+    el.appendChild(button);
+  }
+}
+function historyRow(node) {
+  if (!is(node, "El")) return "";
+  const attrs = [...each(node.attrs)];
+  const id = attrs.find(a => is(a, "At") && a.name === "data-id")?.value;
+  if (id) return id;
+  if (attrs.some(a => !is(a, "At") && a.event === "click" && a.action === "fold"))
+    return attrs.find(a => is(a, "At") && a.name === "data-value")?.value.slice(1) || "";
+  return "";
+}
+function historySnapshotRow(node) {
+  if (!is(node, "El")) return false;
+  const attrs = [...each(node.attrs)], classes = attrs.find(a => is(a, "At") && a.name === "class")?.value.split(/\s+/) || [];
+  if (classes.includes("live") || classes.includes("sending") || !historyRow(node)) return false;
+  return classes.includes("msg") || attrs.some(a => !is(a, "At") && a.event === "click" && a.action === "fold");
+}
+function historyProject(node) {
+  if (!is(node, "El")) return node;
+  const kids = [...each(node.kids)];
+  if ([...each(node.attrs)].some(a => is(a, "At") && a.name === "id" && a.value === "timeline")) {
+    const ids = new Set(kids.map(historyRow).filter(Boolean));
+    if (historyRestored) {
+      const rows = historyRestored;historyRestored = null;
+      const shared = rows.map((n, i) => ids.has(historyRow(n)) ? i : -1).filter(i => i >= 0);
+      if (shared.length) {
+        const newer = rows.slice(shared.at(-1) + 1).filter(n => !ids.has(historyRow(n)));
+        historySpare = newer.length ? newer : rows.slice(0, shared[0]).filter(n => !ids.has(historyRow(n)));
+        historySpare.direction = newer.length ? "older" : "newer";
+      }
+    }
+    if (historyPage) {
+      const previous = historyBase || [];
+      const shared = previous.map((n, i) => ids.has(historyRow(n)) ? i : -1).filter(i => i >= 0);
+      const outgoing = !shared.length ? previous : historyPage.direction === "older" ? previous.slice(shared.at(-1) + 1) : previous.slice(0, shared[0]);
+      historySpare = outgoing.filter(n => historyRow(n) && !ids.has(historyRow(n)));
+      // A run cut at the old page boundary can gain an earlier fold head.
+      // Its following shared message identifies the same visible run.
+      if (held?.id.startsWith("fold:") && !ids.has(held.id.slice(5)) && !historySpare.some(n => historyRow(n) === held.id.slice(5))) {
+        const at = previous.findIndex(n => historyRow(n) === held.id.slice(5));
+        const next = previous.slice(at + 1).find(n => ids.has(historyRow(n)));
+        const end = next && kids.findIndex(n => historyRow(n) === historyRow(next));
+        if (typeof end === "number") for (let i = end - 1; i >= 0; i--) {
+          const id = historyRow(kids[i]);
+          if (id && [...each(kids[i].attrs)].some(a => !is(a, "At") && a.action === "fold")) { held = { ...held, id: "fold:" + id };break; }
+          if (id) break;
+        }
+      }
+      historySpare.direction = historyPage.direction;historyPage = null;
+    }
+    historyBase = kids.slice();
+    const spare = historySpare.filter(n => !ids.has(historyRow(n)));
+    // Place spare entries with the body, inside the existing scroll track.
+    // Work/fab controls and live/sending rows come only from the current view.
+    if (spare.length) {
+      const rowIndexes = kids.map((n, i) => historyRow(n) ? i : -1).filter(i => i >= 0);
+      const at = historySpare.direction === "older" ? (rowIndexes.at(-1) ?? kids.length - 1) + 1 : (rowIndexes[0] ?? kids.length);
+      kids.splice(at, 0, ...spare);
+    }
+  } else {
+    for (let i = 0; i < kids.length; i++) kids[i] = historyProject(kids[i]);
+  }
+  let list = { $: "Nil" };for (let i = kids.length - 1; i >= 0; i--) list = { $: "Con", head: kids[i], tail: list };
+  return { ...node, kids: list };
+}
 
 // the entry at the top of the timeline's view, and where it is in the
 // window (so a header or panel above the timeline growing moves it not)
 function anchorOf(tl) {
   const top = tl.getBoundingClientRect().top;
-  for (const el of tl.querySelectorAll("[data-id]")) {
+  for (const el of tl.querySelectorAll("[data-id], button.fold")) {
     const r = el.getBoundingClientRect();
-    if (r.bottom > top + 1) return { id: el.getAttribute("data-id"), off: r.top };
+    if (r.height > 0 && r.bottom > top + 1) return { id: el.getAttribute("data-id") || "fold:" + el.getAttribute("data-value").slice(1), off: r.top };
   }
   return null;
+}
+function anchorElement(tl, id) {
+  return id.startsWith("fold:") ? [...tl.querySelectorAll("button.fold")].find(el => el.getAttribute("data-value")?.slice(1) === id.slice(5))
+    : tl.querySelector(`[data-id="${CSS.escape(id)}"]`);
 }
 
 // Reading while the thread grows (client.bend's Hold): only a timeline at
@@ -459,6 +582,8 @@ function anchorOf(tl) {
 let held = null;
 // until when an upward gesture keeps the end from catching the view (leaveEnd)
 let leavingEndUntil = 0;
+// until when a downward gesture lets the end catch the view from near it
+let towardEndUntil = 0;
 let away = "";
 // where the last of our own corrections left the timeline: its scroll
 // event is ours, not the person's, and keeps the offset held (no drift)
@@ -478,7 +603,7 @@ function holdFix(tl) {
     if (tl.scrollTop < end) { tl.scrollTop = end; fixedAt = tl.scrollTop; }
     return;
   }
-  const el = tl.querySelector(`[data-id="${CSS.escape(held.id)}"]`);
+  const el = anchorElement(tl, held.id);
   if (!el) return;
   const d = el.getBoundingClientRect().top - held.off;
   if (d) { tl.scrollTop += d; fixedAt = tl.scrollTop; }
@@ -510,7 +635,11 @@ function holdRead(tl) {
   // thread's: it holds like anywhere else, and newer rows come by scrolling
   // while an upward gesture lasts the end does not catch the view again:
   // a smooth scroll's first frames are still within the end's few px
-  held = holdEnd(tl) && performance.now() > leavingEndUntil && !(thin && thin.atNewest?.() === false) ? null : anchorOf(tl);
+  // and a downward gesture that brings it within a third of a screen of the
+  // end catches up: a reply streaming faster than the wheel moves left the
+  // view a few lines short of the end for good
+  const nearEnd = holdEnd(tl) || (performance.now() < towardEndUntil && tl.scrollHeight - tl.scrollTop - tl.clientHeight <= tl.clientHeight / 3);
+  held = nearEnd && performance.now() > leavingEndUntil && !(thin && thin.atNewest?.() === false) ? null : anchorOf(tl);
   holdSay(held ? App.sel(ui) : "");
 }
 const holdSizes = typeof ResizeObserver === "function" ? new ResizeObserver(() => holdFix(document.getElementById("timeline"))) : null;
@@ -518,6 +647,8 @@ function holdWatch(tl) {
   if (!holdSizes) return;
   holdSizes.disconnect();
   if (!tl) return;
+  // Explicit message anchors own corrections, including scrollTop clamping.
+  tl.style.overflowAnchor = "none";
   holdSizes.observe(tl);
   for (const c of tl.children) holdSizes.observe(c);
 }
@@ -568,9 +699,13 @@ function render() {
   queued = false;
   const tl = document.getElementById("timeline");
   const t0 = PERF ? pnow() : 0;
-  const page = frontendNode ? thinContinuations.project(App.presentation_overlay(frontendNode, presentationJson(modelFeedback.project(currentSession()))), expand)
+  let page = frontendNode ? thinContinuations.project(App.presentation_overlay(frontendNode, presentationJson(modelFeedback.project(currentSession()))), expand)
     : transitionNode ? App.presentation_overlay(transitionNode, presentationJson(currentSession())) : focusedNode
     || (canonicalBoot ? App.view(ui) : App.presentation_node(presentationJson(themed(Wire.plain(App.presentation_view(App.presentation_wait(ui)))))));
+  // A wheel/touch may have moved since the last scroll event or page request.
+  // Capture at application time, before pruning or inserting any rows.
+  if (held && tl) held = anchorOf(tl) || held;
+  if (frontendNode) page = historyProject(page);
   const t1 = PERF ? pnow() : 0;
   patch(root, { $: T.El, tag: "div", key: "", attrs: { $: "Nil" }, kids: { $: "Con", head: page, tail: { $: "Nil" } } });
   bubMoveSync();
@@ -594,12 +729,14 @@ function render() {
   // another timeline (or a send, a new thread: ScrollEnd) starts at its end
   if (scroll || tl !== tl2) {
     held = null;
+    // a send ends any gesture away from the end: the view follows its reply
+    leavingEndUntil = 0;
     holdSay("");
   }
   if (transitionPosition && tl2) {
     const position = transitionPosition;transitionPosition = null;
     tl2.scrollTop = position.atEnd ? tl2.scrollHeight : position.top || 0;
-    const anchor = position.anchor && tl2.querySelector(`[data-id="${CSS.escape(position.anchor)}"]`);
+    const anchor = position.anchor && anchorElement(tl2, position.anchor);
     if (!position.atEnd && anchor) {
       tl2.scrollTop += anchor.getBoundingClientRect().top - tl2.getBoundingClientRect().top - position.offset;
       held = {id:position.anchor, off:anchor.getBoundingClientRect().top};
@@ -609,6 +746,7 @@ function render() {
   if (viewMode === "view-v1") document.querySelector("main")?.setAttribute("aria-busy", String(!remoteReady));
   holdFix(tl2);
   holdWatch(tl2);
+  if (historyStatus) historyPageState(historyStatus);
   scroll = false;
   // an entry the history went back to (Jump): brought into view, flashed
   if (jump && tl2) {
@@ -620,6 +758,18 @@ function render() {
       el.classList.add("jumped");
     }
     jump = null;
+  }
+  if (searchJump && tl2 && searchJump.thread === (thin?.session?.sel ?? App.sel(ui))) {
+    const el = tl2.querySelector(`[data-id="${CSS.escape(searchJump.id)}"]`);
+    if (el) {
+      el.scrollIntoView({ block: "center" });
+      el.classList.remove("jumped");
+      void el.offsetWidth;
+      el.classList.add("jumped");
+      searchJump = null;
+    } else if (thin?.window?.older && searchJump.pages < 40) {
+      if (!searchJump.asked) { searchJump.asked = true; requestAnimationFrame(() => { if (searchJump) { searchJump.asked = false; if (thin.page()) searchJump.pages++; } }); }
+    } else if (thin?.ready) searchJump = null;
   }
   Solid.mount(document.getElementById("solid"));
   Plot2d.mount(document.getElementById("plot"));
@@ -822,6 +972,7 @@ function dispatch(action, value, timer) {
     return true;
   }
   if (action === "desktop-backend" && window.backplaneDesktop?.chooseBackend) { void window.backplaneDesktop.chooseBackend(); return true; }
+  if (["send", "send-alt"].includes(action)) historyClear();
   if (action === "side-toggle" || action === "rail-toggle") return foldToggle(action === "side-toggle" ? "side" : "rail");
   if (["term-toggle", "ws-term-hide", "ws-term-here"].includes(action) || action === "ws-go" && value === "term") terminalOutput.retire();
   else if (["select", "bot", "bot-tab", "uber", "uber-bot", "remote"].includes(action)) terminalOutput.clear();
@@ -1360,8 +1511,10 @@ function lbLater() {
 
 function lbClose() {
   if (!lb) return;
+  const focus = lb.focus;
   lb.el.remove();
   lb = null;
+  if (focus?.isConnected) focus.focus({ preventScroll: true });
   desktopBrowser.sync();
 }
 
@@ -1374,7 +1527,8 @@ function lbOpen(url) {
   lbClose();
   const el = create(App.lb_node_in(App.lang(ui), url));
   const img = el.querySelector("img");
-  lb = { el, img, v: App.lb_open(), drawing: false, pointers: new Map(), pinch: null };
+  lb = { el, img, v: App.lb_open(), drawing: false, pointers: new Map(), pinch: null, focus: document.activeElement };
+  installImageActions(el, img, url);
   img.style.visibility = "hidden"; // until loaded; lb_css then sets the whole style
   img.addEventListener("load", lbDraw);
   el.addEventListener("wheel", (e) => {
@@ -1386,7 +1540,7 @@ function lbOpen(url) {
     lbDraw();
   }, { passive: false });
   el.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("[data-lb-close]")) return;
+    if (e.button !== 0 || e.target.closest("button,[role=status]")) return;
     e.preventDefault();
     el.setPointerCapture(e.pointerId);
     lb.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1428,7 +1582,7 @@ function lbOpen(url) {
   });
   document.body.appendChild(el);
   desktopBrowser.sync();
-  document.activeElement?.blur?.();
+  el.querySelector('[data-lb-close]').focus({ preventScroll: true });
   if (img.complete) lbDraw();
 }
 
@@ -1445,13 +1599,21 @@ function earlierCheck(tl) {
   if (earlierAsked || !(tl instanceof Element) || tl.id !== "timeline") return;
   const mark = tl.querySelector("[data-earlier]");
   if (!mark || tl.scrollTop > tl.clientHeight * 2) return;
+  if (thin?.pageError || stationaryPages >= 4 || !historyCanPage(tl, "older")) return;
   earlierAsked = true;
   // a page already on its way refuses the request: nothing was asked, so
   // the gesture still stands and the next check asks again
   if (dispatch("earlier", mark.getAttribute("data-earlier") ?? "") === false) { earlierAsked = false;return; }
-  olderGestureUntil = 0;
+  stationaryPages++;
 }
-document.addEventListener("scroll", (e) => earlierCheck(e.target), true);
+document.addEventListener("scroll", (e) => {
+  const tl = e.target;if (tl?.id !== "timeline") return;
+  if (tl === historyScrollOwner && tl.scrollTop !== fixedAt) {
+    if (tl.scrollTop < historyScrollTop && olderGestureUntil) { olderGestureUntil = performance.now() + 1200;newerGestureUntil = 0;stationaryPages = 0; }
+    if (tl.scrollTop > historyScrollTop && newerGestureUntil) { newerGestureUntil = performance.now() + 1200;olderGestureUntil = 0;stationaryPages = 0; }
+  }
+  historyScrollOwner = tl;historyScrollTop = tl.scrollTop;historyCheckSoon();
+}, true);
 // and back down: on an earlier page, within two screens of its bottom after
 // a downward gesture, the next newer page (thin-host's newer, retracing the
 // pages that led here to the newest)
@@ -1461,12 +1623,30 @@ function laterCheck(tl) {
   if (!newerGestureUntil || performance.now() > newerGestureUntil) return;
   if (laterAsked || !(tl instanceof Element) || tl.id !== "timeline") return;
   if (tl.scrollHeight - tl.scrollTop - tl.clientHeight > tl.clientHeight * 2) return;
+  if (thin.pageError || stationaryPages >= 4 || !historyCanPage(tl, "newer")) return;
   laterAsked = true;
   if (!thin.newer()) { laterAsked = false;return; }
-  newerGestureUntil = 0;
+  stationaryPages++;
 }
-document.addEventListener("scroll", (e) => laterCheck(e.target), true);
-let olderGestureUntil = 0, olderTouchY = null;
+let olderGestureUntil = 0, olderTouchY = null, stationaryPages = 0, historyFrame = false, historyScrollOwner = null, historyScrollTop = 0;
+function historyCanPage(tl, direction) {
+  if (!historyBase) return true;
+  const anchor = anchorOf(tl);
+  // The spare is only a visual bridge. Read into the canonical page before
+  // replacing that bridge, so a fast second request cannot remove the anchor.
+  if (!anchor) return true;
+  const id = anchor.id.replace(/^fold:/, "");
+  if (historyBase.some(n => historyRow(n) === id)) return true;
+  // Reversing into the bridge asks for that adjacent page, rather than
+  // treating it as the bridge about to be discarded in the other direction.
+  return (direction === "newer" && historySpare.direction === "older" || direction === "older" && historySpare.direction === "newer")
+    && historySpare.some(n => historyRow(n) === id);
+}
+function historyCheckSoon() {
+  if (historyFrame) return;
+  historyFrame = true;
+  requestAnimationFrame(() => { historyFrame = false;const tl = document.getElementById("timeline");earlierCheck(tl);laterCheck(tl); });
+}
 // An upward gesture leaves the end at once. Smooth scrolling (the desktop
 // window's) moves a few px in its first frame, still "at the end", and a
 // streamed reply's render then put the view back at the end, cancelling the
@@ -1501,17 +1681,14 @@ function noteOlderGesture(e) {
   // the latest gesture's way wins: a swipe down right after one up must not
   // still ask for the older page (and the other way round)
   if (older && !newer) { olderGestureUntil = performance.now() + 1200;newerGestureUntil = 0; }
-  if (newer && !older) { newerGestureUntil = performance.now() + 1200;olderGestureUntil = 0;leavingEndUntil = 0; }
+  if (newer && !older) { newerGestureUntil = performance.now() + 1200;olderGestureUntil = 0;leavingEndUntil = 0;towardEndUntil = performance.now() + 700; }
+  if (older && !newer) towardEndUntil = 0;
   if (older && !newer && e.type !== "pointerdown") leaveEnd(tl || document.getElementById("timeline"));
   if (older && newer) { olderGestureUntil = newerGestureUntil = performance.now() + 1200; }
   // A timeline already at its top or bottom does not scroll, so no scroll
   // event comes to ask for the next page: the gesture asks itself. A page
   // of folded tool calls is barely a screen, so this is the common case.
-  if (older || newer) requestAnimationFrame(() => {
-    const now = document.getElementById("timeline");
-    earlierCheck(now);
-    laterCheck(now);
-  });
+  if (older || newer) { stationaryPages = 0;historyCheckSoon(); }
 }
 for (const event of ["wheel", "touchstart", "touchmove", "pointerdown", "keydown"]) document.addEventListener(event, noteOlderGesture, { capture: true, passive: true });
 
@@ -1527,6 +1704,12 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (!lb) return;
   e.stopImmediatePropagation();
+  if (e.key === 'Tab') {
+    const controls = [...lb.el.querySelectorAll('button:not([hidden]):not(:disabled)')];
+    const at = controls.indexOf(document.activeElement);
+    e.preventDefault();
+    controls[(at + (e.shiftKey ? controls.length - 1 : 1)) % controls.length]?.focus();
+  }
   if (App.lb_key(e.key)) {
     e.preventDefault();
     lbClose();
@@ -1791,7 +1974,7 @@ function showThinSearch(search) {
   for (const row of search.rows) {
     const button = document.createElement("button");button.type = "button";button.className = "row";
     button.textContent = row.text + (row.partial ? " …" : "");
-    button.addEventListener("click", () => { close();dispatch("select", row.thread); });rows.append(button);
+    button.addEventListener("click", () => { close();searchJump = row.id ? { id: row.id, thread: row.thread, pages: 0, asked: false } : null;dispatch("select", row.thread); });rows.append(button);
   }
   panel.append(rows);
   if (search.hasMore && search.cursor) {
@@ -1891,6 +2074,7 @@ async function startThin(again = false, reason = "initial") {
         action === "send" || action === "send-alt" ? input : session,
         Wire.plain(App.presentation_prepare(presentationJson(session), presentationJson(input), action))),
       selection: (target, session) => {
+        historyClear();
         modelFeedback.clear();
         thinMailDraft.clear();thinContinuations.clear();
         if (target.kind === "thread") { ui = App.presentation_select(ui, target.id);void restoreFocused(); }
@@ -1918,6 +2102,13 @@ async function startThin(again = false, reason = "initial") {
       terminalLifetime: () => document.querySelector('.floating-terminal .term-pane')?.getAttribute('data-terminal-incarnation') || '',
       command: command => presentationCommand(command),
       anchor: () => { const tl = document.getElementById("timeline"), a = tl && anchorOf(tl);return { id: a?.id || "", offset: Math.max(0, Math.round(a ? tl.getBoundingClientRect().top - a.off : 0)) }; },
+      pagePosition: () => {
+        const tl = document.getElementById("timeline");if (!tl) return null;
+        historyRememberBridge();
+        const a = anchorOf(tl), id = a?.id.replace(/^fold:/, "");
+        return { position: { top: tl.scrollTop, atEnd: thin.atNewest() && holdEnd(tl), anchor: a?.id || "", offset: a ? a.off - tl.getBoundingClientRect().top : 0 },
+          adjacent: a && !historyBase?.some(n => historyRow(n) === id) ? historySpare.direction === "older" ? "newer" : "older" : "" };
+      },
       // Give an immediately following user action priority over an unsent
       // notification read. Timer is bounded and works while the page is hidden.
       deferRefresh: refresh => setTimeout(() => { if (current()) refresh(); }, 16),
@@ -1928,15 +2119,20 @@ async function startThin(again = false, reason = "initial") {
       blocked: () => showViewStatus("Wait for the current conversation to connect."),
       viewerChoice: choice => viewerFeedback.choice(choice),
       warning: message => showViewStatus(message),
+      pageState: historyPageState,
       search: showThinSearch, message: showThinMessage,
       view: (node, detail) => {
         if (!current()) return;
+        if (detail.page) historyPage = detail.page;
+        historyRestoreBridge(detail);
+        if (detail.page && !held) { const tl = document.getElementById("timeline");if (tl) { held = anchorOf(tl);heldSize = holdSize(tl); } }
         terminalOutput.rebind();
         const field = mailReplyField(detail.shown);
         const accepted = field === undefined ? undefined : thinMailDraft.matches(detail.mailDraftContext, detail.epoch) ? thin.fieldValue("mrreply", field) : field;
         thinMailDraft.bind(detail.mailDraftContext, detail.epoch, accepted);
         thinContinuations.bind(location.origin, detail);
-        if (!remoteReady) transitionPosition = transitionViews.position(transitionScope(detail.target)) || {atEnd:true};
+        if (detail.position) transitionPosition = detail.position;
+        else if (!remoteReady) transitionPosition = transitionViews.position(transitionScope(detail.target)) || {atEnd:true};
         focusedView.remote(detail.epoch);remoteEpoch = detail.epoch;frontendNode = node;transitionNode = null;
         transitionShell = detail.shown;transitionViews.put(transitionScope(detail.target), detail.shown);
         trace("thin-view", { entries: detail.window?.ids?.length || 0 });later();

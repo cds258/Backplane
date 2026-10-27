@@ -492,10 +492,22 @@ def Mcp.launch.b(bad: Bool, +s: M.State, +now: Nat, +thread: String, +by: String
     case False{}:
       Mcp.launch.k(String.is_empty(String.trim(J.Json.get_str(p, "prompt", ""))), s, now, thread, by, p)
 
+# Scratch remains readable, but no new agent work can be launched there.
+def Mcp.launch.retired_id(+project: String) -> Bool:
+  String.eq(String.to_lower(String.trim(project)), M.Scratch.id())
+
+def Mcp.launch.retired_message() -> String:
+  "Scratch is retired: name a project (machine_list), or ask the uberbot"
+
+def Mcp.launch.retired_guard(retired: Bool, +s: M.State, +now: Nat, +thread: String, +by: String, +p: J.Json) -> Res:
+  match retired:
+    case True{}: Res.fail(Mcp.launch.retired_message())
+    case False{}: Mcp.launch.b(String.is_empty(Mcp.launch.proj(s, thread, J.Json.get_str(p, "project", ""))), s, now, thread, by, p)
+
 # by: who hears its reports (the caller's thread; a caller on another
 # machine as <link>~<thread>, fmcp.bend)
 def Mcp.launch.by(+s: M.State, +now: Nat, +thread: String, +by: String, +p: J.Json) -> Res:
-  Mcp.launch.b(String.is_empty(Mcp.launch.proj(s, thread, J.Json.get_str(p, "project", ""))), s, now, thread, by, p)
+  Mcp.launch.retired_guard(Bool.or(Mcp.launch.retired_id(J.Json.get_str(p, "project", "")), M.Scratch.is(Mcp.launch.proj(s, thread, J.Json.get_str(p, "project", "")))), s, now, thread, by, p)
 
 def Mcp.launch(+s: M.State, +now: Nat, +thread: String, +p: J.Json) -> Res:
   Mcp.launch.by(s, now, thread, thread, p)
@@ -840,7 +852,7 @@ def Mcp.tools() -> J.Json:
       [Tool.prop("threadId", "string", "The thread to read."), Tool.prop("limit", "number", "How many entries (default 40).")], ["threadId"]),
     Tool.def("thread_send", "Send a message to another thread in this project, or on another machine by its <link>~<id>. It is delivered at once: an idle thread starts a turn with it, a running turn takes it (Claude at once; Codex, Grok and Muse with their next Backplane tool result, or as a new turn if theirs ends first).",
       [Tool.prop("threadId", "string", "The thread."), Tool.prop("text", "string", "The message.")], ["threadId", "text"]),
-    Tool.def("thread_launch", "Start a new top-level thread in this project, or in `project` (not a child of this one: the user sees it in the sidebar like their own) with a first message, on any provider/model. Bots must name the project. Answers its threadId. Its reports come to you by themselves, as a message that wakes you: each time its turn ends (completed, failed or interrupted, with its last reply), and at once when it asks the person something; so end your turn instead of polling, and answer it with thread_send. report false launches it without reports; thread_update turns them off or on later. With `machine`, it starts on that other machine of the person's, in its project named by `project` (machine_list).",
+    Tool.def("thread_launch", "Start a new top-level thread in this project, or in `project` (not a child of this one: the user sees it in the sidebar like their own) with a first message, on any provider/model. Bots must name the project. Scratch is retired and cannot be a launch target; use a project from machine_list. Answers its threadId. Its reports come to you by themselves, as a message that wakes you: each time its turn ends (completed, failed or interrupted, with its last reply), and at once when it asks the person something; so end your turn instead of polling, and answer it with thread_send. report false launches it without reports; thread_update turns them off or on later. With `machine`, it starts on that other machine of the person's, in its project named by `project` (machine_list).",
       [Tool.prop("prompt", "string", "The first message, complete."), Tool.prop("title", "string", "A short title (default: from the prompt)."), Tool.prop("report", "boolean", "Whether its turn ends and asks are reported to you (default true)."),
        Tool.prop("provider", "string", "claude, codex, grok, muse, antigravity, opencode, pi or omp (default: the user's default)."), Tool.prop("model", "string", "Model (default: the provider's default)."),
        Tool.prop("project", "string", "The project's name or id (default: this thread's; bots must give one); on another machine its <link>~<id> from machine_list."),

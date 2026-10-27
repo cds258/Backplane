@@ -48,6 +48,11 @@ contextBridge.exposeInMainWorld('backplaneDesktop', Object.freeze({
   theme,
   themeSeen: value => { if (value === 'light' || value === 'dark') ipcRenderer.send('desktop:theme', value); },
   terminalFocus: active => ipcRenderer.send('desktop:terminal-focus', active === true),
+  image: Object.freeze({
+    local: source => ipcRenderer.invoke('desktop:image-local', source),
+    copy: png => ipcRenderer.invoke('desktop:image-copy', png),
+    reveal: source => ipcRenderer.invoke('desktop:image-reveal', source),
+  }),
   ...(browser ? {browser} : {}),
   chooseFolder: () => ipcRenderer.invoke('desktop:choose-folder'),
   version: () => ipcRenderer.invoke('desktop:version'),

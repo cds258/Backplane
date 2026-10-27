@@ -106,35 +106,56 @@ def Plan.off(p: Plan) -> Nat:
 
 # Native IO cuts at complete UTF-8 line boundaries. Only this bounded batch
 # is retained; the in-memory fold drops entries after every transaction.
-def Sto.chunks(fuel: Nat, empty: Bool, +h: String, +home: String, +p: Plan) -> IO(Unit):
+def Sto.chunks(fuel: Nat, empty: Bool, +h: String, +home: String, +p: Plan) -> IO(Plan):
   match fuel empty:
-    case 0n _: IO.pure(Unit, Unit{})
-    case _ True{}: IO.pure(Unit, Unit{})
+    case 0n _: IO.pure(Plan, p)
+    case _ True{}: IO.pure(Plan, p)
     case 1n+f False{}:
-      do IO<Unit>:
+      do IO<Plan>:
         +batch : List<&2, String> <- Disk.read(home ++ "/events.jsonl", Nat.show(Plan.off(p)))
         SB.Stb.check("bounded log read", Maybe.default(&2, String, List.head(&2, String, batch), "fail missing batch"))
         +ls : List<&2, String> = List.drop(&2, String, batch, 1n)
         +next : Plan <- Sto.tail(1n+List.length(&2, String, ls), ls, h, p)
         Sto.chunks(f, List.is_empty(&2, String, ls), h, home, next)
 
-def Sto.catchup.read(empty: Bool, +h: String, +home: String, +meta: Map<&2, String>, off: Nat, size: Nat) -> IO(Unit):
+type Opened is Data:
+  Opened{handle: String, warm: Maybe<&2, HB.Warm>}
+
+def Opened.handle(o: Opened) -> String:
+  match o:
+    case Opened{h, _}: h
+
+def Opened.warm(o: Opened) -> Maybe<&2, HB.Warm>:
+  match o:
+    case Opened{_, warm}: warm
+
+def Plan.threads(p: Plan) -> Map<&2, M.Thread>:
+  match p:
+    case Plan{M.State{_, ts, _, _, _, _, _, _, _, _, _}, _, _, _, _, _}: ts
+
+def Plan.warm(+p: Plan, home: String, log: String) -> HB.Warm:
+  match p:
+    case Plan{_, _, +seq, +off, _, _}:
+      HB.Warm{home, Nat.show(seq), Nat.show(off), log, Plan.threads(p)}
+
+def Sto.catchup.read(empty: Bool, +h: String, +home: String, +meta: Map<&2, String>, off: Nat, size: Nat) -> IO(Opened):
   match empty:
-    case True{}: IO.pure(Unit, Unit{})
+    case True{}: IO.pure(Opened, Opened{h, None{}})
     case False{}:
-      do IO<Unit>:
+      do IO<Opened>:
         +records : Map<&2, List<&2, List<&2, String>>> <- HB.Hot.read.recs(h)
         +rows : SN.SRows = SN.SRows{records}
-        Sto.chunks(1n+size, False{}, h, home, Plan{SN.Snap.state(rows), SN.Snap.counts(rows), SN.Snap.num(HB.Hot.get(meta, "applied_seq"), 0n), off, Nat.max(1n, SN.Snap.num(HB.Hot.get(meta, "ord"), 0n)), Nil{}})
+        +p : Plan <- Sto.chunks(1n+size, False{}, h, home, Plan{SN.Snap.state(rows), SN.Snap.counts(rows), SN.Snap.num(HB.Hot.get(meta, "applied_seq"), 0n), off, Nat.max(1n, SN.Snap.num(HB.Hot.get(meta, "ord"), 0n)), Nil{}})
+        return Opened{h, Some{Plan.warm(p, home, HB.Hot.get(meta, "log_id"))}}
 
-def Sto.catchup(+h: String, +home: String, +meta: Map<&2, String>) -> IO(Unit):
-  do IO<Unit>:
+def Sto.catchup(+h: String, +home: String, +meta: Map<&2, String>) -> IO(Opened):
+  do IO<Opened>:
     +off : Nat = SN.Snap.num(HB.Hot.get(meta, "applied_off"), 0n)
     +size : U32 <- HB.Hot.size(home ++ "/events.jsonl")
     Sto.catchup.read(Nat.is_eq(off, U32.to_nat(size)), h, home, meta, off, U32.to_nat(size))
 
-def Sto.rebuild(+home: String) -> IO(String):
-  do IO<String>:
+def Sto.rebuild(+home: String) -> IO(Opened):
+  do IO<Opened>:
     +temp : String <- Disk.temp(home)
     b : SB.Built <- SB.Stb.build(temp, 65536)
     result : String <- Disk.promote(home, temp)
@@ -143,26 +164,25 @@ def Sto.rebuild(+home: String) -> IO(String):
     +h : String <- SB.Stb.open(opened)
     durable : String <- D.Db.exec(h, "PRAGMA synchronous=FULL")
     SB.Stb.check("durable rebuilt checkpoint", durable)
-    return h
+    return Opened{h, None{}}
 
-def Sto.checked(ok: Bool, +h: String, +home: String, +meta: Map<&2, String>) -> IO(String):
+def Sto.checked(ok: Bool, +h: String, +home: String, +meta: Map<&2, String>) -> IO(Opened):
   match ok:
     case True{}:
-      do IO<String>:
+      do IO<Opened>:
         sync : String <- D.Db.exec(h, "PRAGMA synchronous=FULL")
         SB.Stb.check("durable checkpoints", sync)
         Sto.catchup(h, home, meta)
-        return h
     case False{}:
-      do IO<String>:
+      do IO<Opened>:
         closed : String <- D.Db.close(h)
         Sto.rebuild(home)
 
-def Sto.opened(ok: Bool, +opened: String, +home: String) -> IO(String):
+def Sto.opened(ok: Bool, +opened: String, +home: String) -> IO(Opened):
   match ok:
     case False{}: Sto.rebuild(home)
     case True{}:
-      do IO<String>:
+      do IO<Opened>:
         +h : String = String.drop(opened, 3n)
         rows : List<&2, List<&2, String>> <- D.Db.query(h, "SELECT k,v FROM meta", [], 1000)
         +meta : Map<&2, String> = HB.Hot.meta.go(rows, Map.new(&2, String))
@@ -170,12 +190,18 @@ def Sto.opened(ok: Bool, +opened: String, +home: String) -> IO(String):
         head : List<&2, U32> <- HB.Hot.head(home ++ "/events.jsonl")
         Sto.checked(String.is_empty(HB.Hot.check(meta, size, S.Sdb.log_id(head))), h, home, meta)
 
-def Sto.open(+home: String) -> IO(String):
-  do IO<String>:
+def Sto.boot(+home: String) -> IO(Opened):
+  do IO<Opened>:
     ready : String <- Disk.prepare(home)
     SB.Stb.check("log tail", ready)
     +opened : String <- D.Db.open(home ++ "/store.db")
     Sto.opened(String.starts_with(opened, "ok "), opened, home)
+
+# Keep the handle-only API for writers and existing checkpoint callers.
+def Sto.open(home: String) -> IO(String):
+  do IO<String>:
+    o : Opened <- Sto.boot(home)
+    return Opened.handle(o)
 
 type Updated is Data:
   Updated{st: M.State, result: String}

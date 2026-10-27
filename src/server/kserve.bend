@@ -487,21 +487,36 @@ def KServe.flush(ws: List<&2, Wt>, +k: Ks) -> IO(Ks):
 def KServe.mkdir(+dir: String) -> IO(Unit):
   IO.bind(P.Ran, Unit, P.Proc.run("sh", ["-c", "umask 077; mkdir -p \"$1\" && chmod 700 \"$1\"", "sh", dir], "/"), r => IO.pure(Unit, Unit{}))
 
-def KServe.spawn.fields(+project: String, +argv: List<&2, String>) -> List<&2, J.KV>:
-  [J.KV{"op", J.Str{"spawn"}}, J.KV{"key", J.Str{project}}, J.KV{"argv", J.Json.arr(KServe.strs(argv))}, J.KV{"memory", J.Str{"1536M"}}]
+def KServe.spawn.fields(+project: String, +argv: List<&2, String>, library: String, config: String) -> List<&2, J.KV>:
+  [J.KV{"op", J.Str{"spawn"}}, J.KV{"key", J.Str{project}}, J.KV{"argv", J.Json.arr(KServe.strs(argv))}, J.KV{"memory", J.Str{"1536M"}},
+   J.KV{"env", J.Json.obj([J.KV{"BACKPLANE_KICAD_LIBRARY", J.Str{library}}, J.KV{"KICAD_CONFIG_HOME", J.Str{config}}])}]
 
 # the project's server is started (its record says "starting" until it
 # is listening and has answered), and 30 s are given to say so
-def KServe.launch(+k: Ks, +project: String) -> IO(Ks):
+def KServe.launch.ready(+k: Ks, +project: String) -> IO(Ks):
   do IO<Ks>:
     +now : Nat <- KServe.now()
     +env : KEnv = Ks.env(k)
     +dir : String = KS.KS.dir(Ks.rt(k), Ks.home(k), project)
     KServe.mkdir(dir)
+    library : String <- K.Rt.env("BACKPLANE_KICAD_LIBRARY")
+    config : String <- K.Rt.env("KICAD_CONFIG_HOME")
     +sink : Chan(String) <- Chan.new(String, 1)
-    hp : Hp <- KServe.call(Ks.hp(k), Ks.q(k), KServe.spawn.fields(project, KS.KS.argv(KEnv.cli(env), project, dir, Ks.hub(k), KEnv.caps(env))), sink)
+    hp : Hp <- KServe.call(Ks.hp(k), Ks.q(k), KServe.spawn.fields(project, KS.KS.argv(KEnv.cli(env), project, dir, Ks.hub(k), KEnv.caps(env)), library, config), sink)
     IO.spawn(Unit, KServe.later(Ks.q(k), 30000, KLate{project, now}))
     KServe.emit(Ks.with_srvs(Ks.with_hp(k, hp), KServe.put(Ks.srvs(k), KS.KS.starting(KServe.get(Ks.srvs(k), project), now))))
+
+def KServe.launch.prepared(fine: Bool, why: String, +k: Ks, +project: String) -> IO(Ks):
+  match fine:
+    case True{}: KServe.launch.ready(k, project)
+    case False{}:
+      do IO<Ks>:
+        now : Nat <- KServe.now()
+        r : Result<&1, &1, KMsg, Unit> <- Chan.send(KMsg, Ks.q(k), KBad{project, why})
+        return Ks.with_srvs(k, KServe.put(Ks.srvs(k), KS.KS.starting(KServe.get(Ks.srvs(k), project), now)))
+
+def KServe.launch(+k: Ks, +project: String) -> IO(Ks):
+  IO.bind(String, Ks, K.KiCad.prepare(KEnv.cli(Ks.env(k))), +why => KServe.launch.prepared(String.is_empty(why), why, k, project))
 
 def KServe.close.k(empty: Bool, +k: Ks, +sock: String) -> IO(Ks):
   match empty:

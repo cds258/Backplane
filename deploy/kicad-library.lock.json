@@ -1,0 +1,13 @@
+{
+  "repository": "BackplaneWorks/Backplane_KiCad_Library",
+  "version": "2026.10.26",
+  "tag": "v2026.10.26",
+  "source_commit": "6e0ccc182c6307a6030142610316db7f45871026",
+  "url": "https://github.com/BackplaneWorks/Backplane_KiCad_Library/releases/download/v2026.10.26/backplane-kicad-library-2026.10.26.tar.gz",
+  "sha256": "8ce1d9302c3a0bb1a6c3196997a04c91adddbe1e033cdd9e1019057a771d8cfe",
+  "bytes": 2528194,
+  "root": "Backplane_KiCad_Library",
+  "footprint_count": 199,
+  "step_model_count": 42,
+  "library_nicknames": ["Backplane_MountingHole", "Backplane_Passives_Least", "Backplane_Passives_Most", "Backplane_Passives_Nominal", "Backplane_Shoggoth"]
+}

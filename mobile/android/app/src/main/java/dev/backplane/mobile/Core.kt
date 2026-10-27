@@ -771,12 +771,22 @@ class Core(private val app: Application) : Application.ActivityLifecycleCallback
         } == true
         out.screen?.takeIf { next ->
             val thinFresh = startup[next.hub] != StartupPolicy.THIN || thinReady[next.hub]?.let {
-                it.first == epochs[next.hub] && it.second == nav(next) && (pendingNav == null || pendingNav == nav(next)) && (opening == null || opening?.nav == nav(next)) &&
+                // the screen the presented view was for; or, with no navigation of the
+                // person's own pending, where the hub went by itself (a new thread
+                // or fork opens once thread.create is answered, often in a later
+                // frame than the one that said "presented": it was dropped, and
+                // "New thread" waited for good)
+                it.first == epochs[next.hub] && (it.second == nav(next) || (pendingNav == null && opening == null)) &&
+                    (pendingNav == null || pendingNav == nav(next)) && (opening == null || opening?.nav == nav(next)) &&
                     out.sync.none { update -> update.hub == next.hub && update.phase in setOf("presented", "presenting") && !currentThinReply(update, it.first) }
             } == true
             (next.hub.isEmpty() || links.any { link -> Pairing.key(link) == next.hub }) && (!cachedPresentation || fresh) && thinFresh
         }?.let { next ->
             cachedPresentation = false
+            // the screen went where the hub went: the ready mark follows it
+            // (else contentReady stayed false and every action was dropped)
+            if (startup[next.hub] == StartupPolicy.THIN && pendingNav == null && opening == null)
+                thinReady[next.hub]?.let { if (it.first == epochs[next.hub] && it.second != nav(next)) thinReady[next.hub] = it.first to nav(next) }
             if (pendingNav == nav(next)) pendingNav = null
             out.screenJSON?.takeIf { !cleared && (opening == null || opening?.nav == nav(next)) }?.let { raw ->
                 lastScreenJSON = raw

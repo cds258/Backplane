@@ -34,6 +34,13 @@ def ss(+es: List<&2, M.Entry>, +r: Z.TzRule, +now: Nat, +running: Bool) -> S.Sta
 def st(+es: List<&2, M.Entry>, +r: Z.TzRule, +now: Nat, +running: Bool, +i: Nat) -> String:
   S.Stamp.text(ss(es, r, now, running), Maybe.default(&2, M.Entry, List.get(&2, M.Entry, es, i), act("none", 0n)))
 
+# the last turn stopped (the person's Stop): its last reply says so
+def ss.stop(+es: List<&2, M.Entry>, +r: Z.TzRule, +now: Nat) -> S.Stamps:
+  S.Stamps.at.s(r, now, S.Stamp.ends(es, False{}), S.Stamp.last.go(List.reverse(&2, M.Entry, es)))
+
+def st.stop(+es: List<&2, M.Entry>, +r: Z.TzRule, +now: Nat, +i: Nat) -> String:
+  S.Stamp.text(ss.stop(es, r, now), Maybe.default(&2, M.Entry, List.get(&2, M.Entry, es, i), act("none", 0n)))
+
 def utc() -> Z.TzRule:
   Z.Tz.utc0()
 
@@ -49,4 +56,7 @@ def main() -> IO(Unit):
     C.Check.str("only a turn's last reply finishes it", st([a("a1", 30n), a("a2", 433n), u("u2", 1000n)], utc(), at(3600n), False{}, 0n), "09:00")
     C.Check.str("another day shows the date", st(es(), utc(), at(172800n), True{}, 0n), "Tue 13 Oct 09:00")
     C.Check.str("in the person's zone", st(es(), Z.Tz.fixed(True{}, 10800n), at(3600n), True{}, 0n), "12:00")
+    C.Check.str("a stopped turn's last reply says Stopped", st.stop(es(), utc(), at(3600n), 6n), "Stopped 09:16 · 10s")
+    C.Check.str("the turns before it still say Finished", st.stop(es(), utc(), at(3600n), 3n), "Finished 09:07 · 7m 13s")
+    C.Check.str("a stop with no reply yet marks nothing", S.Stamp.last.go(List.reverse(&2, M.Entry, [u("u1", 0n), a("a1", 30n), u("u2", 60n)])), "")
     C.Check.str("a turn with no reply finishes nothing", st([u("u1", 0n), act("x1", 5n), u("u2", 60n)], utc(), at(3600n), False{}, 0n), "09:00")
