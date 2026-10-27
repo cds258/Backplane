@@ -2,5 +2,5 @@
 # build time by scripts/build-kistack.sh: the commit, and the sha256 of its
 # skills/ tree (each file's sha256 and path, sorted, hashed again: GitHub's
 # tarballs are not byte-stable, the tree is). Change both together.
-rev 92c0bccb130c7b68966d17539e65c0026af95eb4
-skills 638cbf5fa07c96b7c458b442beec0352a546958d91d09e284f626f89735a3546
+rev 641ade9041bb0844c4530dfff11010eef30919af
+skills cc68df39e9965f7797ca4f79ba63e77a4f5a3b4b4d04678587ee33d9573e475f

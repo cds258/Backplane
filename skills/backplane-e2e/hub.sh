@@ -5,6 +5,9 @@
 #
 #   hub.sh start NAME      start one; prints shell lines: PORT= TOKEN= URL=
 #                          PAIR= HOME_DIR= PROJ= MULTI= THREAD= PID=
+#   hub.sh prep NAME       only its folders, fixture projects and stand-in
+#                          agents, no hub (win.sh's hub in WSL); prints
+#                          ROOT= HOME_DIR= PROJ= MULTI= FAKE= USERHOME=
 #   hub.sh long NAME [N]   a thread of N (80) exchanges in the fixture
 #                          project (the history-paging stories); prints LONG=
 #   hub.sh stop NAME       stop it (the PID it started, nothing else)
@@ -16,7 +19,7 @@
 # BP_E2E_FIXTURE  a KiCad project folder (default /usr/share/kicad/demos/ecc83);
 #                 its top-level KiCad files are copied, nothing else
 # BP_E2E_ROOT     scratch root (default ${TMPDIR:-/tmp}/bp-e2e)
-# BP_E2E_STREAM   stand-in reply: deltas per turn (60) and ms apart (50)
+# BP_E2E_STREAM   stand-in reply: "N [MS]", deltas per turn (60) and ms apart (50)
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -54,24 +57,29 @@ seed() {
   printf '{"project": "boards/alpha/alpha.kicad_pro"}\n' > "$root/multi/.backplane.json"
 }
 
+prep() {
+  [ ! -d "$root/home" ] || return 0
+  mkdir -p "$root/home" "$root/fake" "$root/userhome"
+  seed
+  # bun by its path: a hub started by wsl.exe has no login PATH
+  printf '#!/bin/sh\nexec %s "%s/test/tools/claude_standin.ts" "$@"\n' "$(command -v bun)" "$repo" > "$root/fake/claude"
+  chmod +x "$root/fake/claude"
+  python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])' > "$root/port"
+}
+
 start() {
   [ -x "$bin" ] || { echo "no hub binary at $bin (set BP_E2E_BIN)" >&2; exit 1; }
   if [ -f "$root/pid" ] && kill -0 "$(cat "$root/pid")" 2>/dev/null; then echo "already running: $root" >&2; exit 1; fi
-  if [ ! -d "$root/home" ]; then
-    mkdir -p "$root/home" "$root/fake" "$root/userhome"
-    seed
-    printf '#!/bin/sh\nexec bun "%s/test/tools/claude_standin.ts" "$@"\n' "$repo" > "$root/fake/claude"
-    chmod +x "$root/fake/claude"
-    python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])' > "$root/port"
-    fresh=1
-  else fresh=0; fi
+  fresh=0; [ -d "$root/home" ] || fresh=1
+  prep
   port=$(cat "$root/port")
   set -- "$bin" --home "$root/home" --port "$port" --no-tailscale --foreground
   [ -d "$web" ] && set -- "$@" --web "$web"
-  n=${BP_E2E_STREAM:-60}
+  n=${BP_E2E_STREAM:-60}; ms=50
+  case $n in *" "*) ms=${n#* }; n=${n%% *};; esac
   env HOME="$root/userhome" PATH="$root/fake:$PATH" DISPLAY= WAYLAND_DISPLAY= BACKPLANE_NO_UPDATE=1 BACKPLANE_PEERS= \
-    BACKPLANE_AGENTS="$root/fake" BACKPLANE_VAULT_KEYRING=file BP_STANDIN_MODE=stream BP_STREAM_N="${n%% *}" \
-    BP_STREAM_MS=50 BP_STREAM_SEP="
+    BACKPLANE_AGENTS="$root/fake" BACKPLANE_VAULT_KEYRING=file BP_STANDIN_USAGE=1 BP_STANDIN_MODE=stream BP_STREAM_N="$n" \
+    BP_STREAM_MS="$ms" BP_STREAM_SEP="
 " "$@" > "$root/hub.log" 2>&1 &
   echo $! > "$root/pid"
   i=0; until curl -s -o /dev/null "http://127.0.0.1:$port/hello"; do i=$((i+1)); [ $i -lt 100 ] || { echo "hub did not start; see $root/hub.log" >&2; exit 1; }; sleep 0.2; done
@@ -113,6 +121,8 @@ rpc_project() { grep -o '"ProjectCreated","id":"[^"]*","title":"proj"' "$root/ho
 
 case $cmd in
   start) start ;;
+  prep) command -v bun >/dev/null || { echo "bun is not on PATH" >&2; exit 1; }; prep
+    printf 'ROOT=%s\nHOME_DIR=%s\nPROJ=%s\nMULTI=%s\nFAKE=%s\nUSERHOME=%s\n' "$root" "$root/home" "$root/proj" "$root/multi" "$root/fake" "$root/userhome" ;;
   stop) stop ;;
   restart) stop; start ;;
   long) long "$@" ;;

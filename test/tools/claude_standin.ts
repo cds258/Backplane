@@ -46,6 +46,7 @@
 //                never completes (the line lost); the process stays, silent
 //   deploy       the first command calls the hub's deploy_restart (the MCP
 //                URL, BP_DEPLOY_ARGS, JSON, as its arguments), then ends
+// BP_STANDIN_USAGE=1: results carry token usage and a cost (a counted turn).
 // Every line read is appended to $FAKE_LOG ("IN <line>"), and "START pid".
 // BP_EOF_FINISH=1: at the end of stdin the turn in flight is finished
 // before the process exits, as Claude Code does.
@@ -97,7 +98,11 @@ const say = (text: string) => {
 const result = (text: string, err = false) =>
   emit(err
     ? { type: "result", subtype: "error_during_execution", duration_ms: 10, is_error: true, num_turns: 1, session_id: session, total_cost_usd: 0, usage: {}, modelUsage: {}, uuid: rnd() }
-    : { type: "result", subtype: "success", is_error: false, duration_ms: 10, num_turns: 1, result: text, session_id: session, total_cost_usd: 0, usage: {},
+    : { type: "result", subtype: "success", is_error: false, duration_ms: 10, num_turns: 1, result: text, session_id: session,
+        // BP_STANDIN_USAGE=1: a counted turn, as Claude's results carry (token stats)
+        ...(process.env.BP_STANDIN_USAGE === "1"
+          ? { total_cost_usd: 0.0123, usage: { input_tokens: 1200, cache_creation_input_tokens: 300, cache_read_input_tokens: 4000, output_tokens: 450 } }
+          : { total_cost_usd: 0, usage: {} }),
         modelUsage: { "claude-haiku-4-5-20251001": { inputTokens: 10, outputTokens: 5, contextWindow: 200000 } }, uuid: rnd() });
 
 // background tasks (Bash run_in_background)

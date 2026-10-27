@@ -88,6 +88,23 @@ def Disposition.codex(on: Bool) -> List<&2, String>:
     case False{}: Nil{}
     case True{}: ["-c", "mcp_servers.backplane.tools.mail_dispose.approval_mode=\"approve\""]
 
+# Evidence reads and private journal/escalation tools for the coordinator's
+# live triage ONLY. Keep the legacy single-disposition grant unchanged.
+# No server default, shell, product action, external send or approval tool.
+def Disposition.triage.tools() -> List<&2, String>:
+  ["thread_read", "thread_list", "mail_context", "told_check", "memory_recall", "memory_list", "mail_list", "mail_read", "decide", "escalate"]
+
+def Disposition.triage.flags(names: List<&2, String>) -> List<&2, String>:
+  match names:
+    case Nil{}: Nil{}
+    case name <> rest:
+      "-c" <> ("mcp_servers.backplane.tools." ++ name ++ ".approval_mode=\"approve\"") <> Disposition.triage.flags(rest)
+
+def Disposition.codex.triage(on: Bool) -> List<&2, String>:
+  match on:
+    case False{}: Nil{}
+    case True{}: Disposition.triage.flags(Disposition.triage.tools())
+
 def Disposition.launch.got(r: Maybe<&2, ML.Run>, +s: M.State) -> Bool:
   match r:
     case None{}: False{}
@@ -95,3 +112,7 @@ def Disposition.launch.got(r: Maybe<&2, ML.Run>, +s: M.State) -> Bool:
 
 def Disposition.launch(+s: M.State, +thread: String) -> Bool:
   Disposition.launch.got(ML.Box.run_of(M.State.mail(s), thread), s)
+
+# Never confer these extra tool grants on ordinary, retired or foreign runs.
+def Disposition.triage.launch(+s: M.State, +thread: String) -> Bool:
+  Bool.and(Disposition.launch(s, thread), TRI.Triage.is(s, thread))

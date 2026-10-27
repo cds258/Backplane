@@ -51,3 +51,30 @@ The minimal Mailroom packet preserves the existing Browser baseline. Direct Brow
 The stable four-target artifact producer and standalone web adapter are callable;
 see [RELEASE-PRODUCER.md](RELEASE-PRODUCER.md) for exact inputs, commands and
 qualification boundaries. Local stage-linux.cjs remains a review tool.
+
+## A hub in WSL (Windows)
+
+The Windows app can use the hub inside a WSL distro instead of its own.
+Settings → Network → Hub → Change… (also Ctrl+Shift+H, and Change hub on the
+startup screen) leaves the hub's page for the startup screen's chooser:
+Windows and each WSL distro, listed only then (docker's and rancher's left
+out). The choice is one line in `<BACKPLANE_HOME>\electron-profile\backend`,
+`windows` or `wsl:<distro>`, written by `main.cjs` alone. A hub in WSL is found
+by its `hub.lock` and `token` read over `\\wsl.localhost` (`wsl.cjs`'s probe
+starts the distro and makes the home inside it), started as a detached
+`wsl.exe -d <distro> … backplane-serve --foreground` that outlives the app
+(its output in `<home>/desktop-hub.log`), and accepted at any version. A
+distro with nothing installed offers Install: the release's installer for the
+app's own version, hub only, into `~/.local/share/backplane`.
+
+A checkout's app, or any app given `BACKPLANE_HOME`, is isolated: it must also
+name the hub's home and install folder inside the distro, and refuses the live
+ones:
+
+```sh
+BACKPLANE_WSL_HOME=/tmp/bp-wsl/home BACKPLANE_WSL_PREFIX=/tmp/bp-wsl/prefix
+BACKPLANE_WSL_INSTALLER=/tmp/bp-wsl/install.sh   # optional: what Install runs instead of the release's installer
+```
+
+`skills/backplane-e2e/win.sh` sets these up from inside the distro and runs
+the app in the Windows Electron (stories S33-S38).

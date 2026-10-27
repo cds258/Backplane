@@ -98,6 +98,13 @@ python3 scripts/local-phase.py --record "$work/stamp.resources.json" -- "$bun" b
   "$work/stamped.js" --outfile "$work/native.js" >/dev/null
 python3 scripts/js-native.py --server "$work/native.js" >/dev/null
 mv -f "$work/native.js" "$work/stamped.js"
+# Every service package (dev, headless and native desktop on all targets)
+# carries the same verified KiCad library. Decode only at KiCad selection.
+# Programs without that effect do not download or carry the payload.
+: >"$work/kicad-library.js"
+if grep -q 'BACKPLANE_KICAD_BUNDLE' "$work/all.js"; then
+  python3 scripts/kicad-library-header.py "$work/kicad-library.js"
+fi
 # the baked prelude, then the program: one file for bun to compile
 # removed on every way out: done, a failure (set -e) or a signal
 unbake() { rm -f "$work/baked.js" "$work/bin.js" "$work/baked-t.js" "$work/baked-g.js"; }
@@ -126,7 +133,7 @@ fi
 # the stack prelude first (scripts/js-stack-prelude.js: a 4 GiB stack and
 # Bun's matching JS stack bound, set by executing itself once), then the
 # baked values, then the program
-(umask 077; cat "$work/baked-t.js" "$work/baked-g.js" >"$work/baked.js"; cat scripts/js-stack-prelude.js "$work/baked.js" "$work/stamped.js" >"$work/bin.js")
+(umask 077; cat "$work/baked-t.js" "$work/baked-g.js" >"$work/baked.js"; cat scripts/js-stack-prelude.js "$work/baked.js" "$work/kicad-library.js" "$work/stamped.js" >"$work/bin.js")
 rm -f "$work/baked-t.js" "$work/baked-g.js"
 grep -q '"BACKPLANE_GOOGLE_CLIENT_ID": "[^"]' "$work/baked.js" && echo "baked Google client"
 grep -q '"BACKPLANE_TELEMETRY_KEY": "[^"]' "$work/baked.js" && echo "baked telemetry"

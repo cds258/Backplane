@@ -486,8 +486,16 @@ def View.history.k(ts: List<&2, M.Thread>, +lc: I.Loc, +q: String, +open: Map<&2
         WI.WIcon.button("shelf", "thread-history", "", "Previous conversations", Bool.pick(String, U.Flag.get(open, "conversation-history"), "chevron-down", "chevron-right"), 14, "Conversation history") <>
           View.history.open(Bool.or(U.Flag.get(open, "conversation-history"), Bool.not(String.is_empty(q))), lc, t <> rest, q, ix, st, sel, now)}]
 
+def View.history.live(ts: List<&2, M.Thread>, +lc: I.Loc, +q: String, +ix: U.SIx, +st: M.State, +sel: String, +now: Nat) -> List<&2, D.Node>:
+  match ts:
+    case Nil{}: Nil{}
+    case t <> rest:
+      [D.El{"section", "legacy-live", [D.At{"class", "conversation-history legacy-live"}],
+        D.Dom.span("shelf-label", "Conversations in progress") <> View.history.rows(lc, t <> rest, q, ix, st, sel, now)}]
+
 def View.history(+lc: I.Loc, +q: String, +open: Map<&2, Bool>, +ix: U.SIx, +st: M.State, +sel: String, +now: Nat) -> List<&2, D.Node>:
-  View.history.k(ST.Legacy.threads(st), lc, q, open, ix, st, sel, now)
+  List.append(&2, D.Node, View.history.live(U.Side.legacy.filtered(ST.Legacy.live(st, sel), q), lc, q, ix, st, sel, now),
+    View.history.k(ST.Legacy.history(st, sel), lc, q, open, ix, st, sel, now))
 
 def View.list(+lc: I.Loc, active: Bool, +q: String, +open: Map<&2, Bool>, +ix: U.SIx, +st: M.State, +sel: String, +now: Nat, +look: String, +rm: String) -> List<&2, D.Node>:
   List.append(&2, D.Node, View.list.k(lc, active, q, open, ix, st, sel, now, look, rm), View.history(lc, q, open, ix, st, sel, now))
@@ -622,8 +630,7 @@ def View.sidebar.threads.kind(active: Bool, +u: U.Ui, ix: U.SIx, rows: List<&2, 
 
 def View.sidebar.threads(+u: U.Ui, ix: U.SIx, rows: List<&2, U.SRow>, raw: List<&2, U.SRow>) -> List<&2, String>:
   List.append(&2, String, View.sidebar.threads.kind(String.eq(U.Side.view(U.Ui.state(u)), "active"), u, ix, rows, raw),
-    U.Side.in_project(U.Side.when(Bool.or(U.Ui.flag(u, "conversation-history"), Bool.not(String.is_empty(U.Ui.scratch(u, "@f.pq")))),
-      U.Side.legacy.ids(ST.Legacy.threads(U.Ui.state(u)), U.Ui.scratch(u, "@f.pq"))), U.Ui.state(u), U.Side.cur(u)))
+    U.Side.in_project(U.Side.legacy.shown(u), U.Ui.state(u), U.Side.cur(u)))
 
 def View.sidebar.frame.rows(+lc: I.Loc, bots: List<&2, D.Node>, +u: U.Ui, +plain: U.SIx, +signals: U.SIx, +rows: List<&2, U.SRow>, +unfolded: List<&2, U.SRow>, +raw: List<&2, U.SRow>) -> D.Node:
   View.sidebar.keys(View.sidebar.projected(lc, bots, WB.WB.uber(lc, u, signals), U.Machines.rows.loc(lc, u), U.Menu.items.loc(lc, u, True{}), signals, u, rows, raw),
@@ -1625,6 +1632,15 @@ def View.settings.scale(vs: List<&2, String>, +cur: U32) -> List<&2, D.Node>:
     case +v <> t:
       D.Dom.button(Bool.pick(String, U32.is_eq(TS.Scale.read(v), cur), "on", ""), "setting", "ui.text_scale=" ++ v, TS.Scale.label(v), TS.Scale.label(v)) <> View.settings.scale(t, cur)
 
+# Network's first row, only in the Windows desktop app (client.bend's DeskHub)
+def View.deskhub.k(shown: Bool, +label: String) -> List<&2, D.Node>:
+  match shown:
+    case False{}: Nil{}
+    case True{}: [View.setrow(U.DeskHub.title(), U.DeskHub.note(label), [D.Dom.button("", "desktop-backend", "", U.DeskHub.tip(), U.DeskHub.change())])]
+
+def View.deskhub(+u: U.Ui) -> List<&2, D.Node>:
+  View.deskhub.k(U.DeskHub.shown(u), U.DeskHub.label(u))
+
 def View.settings.rows.k(i: Nat, +lc: I.Loc, +u: U.Ui, +st: M.State, +nf: Map<&2, String>, +v: String, +note: String, +prov: String, +ipc: String) -> List<&2, D.Node>:
   match i:
     case 0n: List.concat(&2, D.Node, [[View.setrow(MSG.T.settings.theme(lc), MSG.T.settings.theme.note(lc), View.chips.loc(lc, ["dark", "light"], Bool.pick(String, String.eq(M.Setting.get(st, "ui.theme", ""), "light"), "light", "dark"), "ui.theme"))],
@@ -1646,7 +1662,7 @@ def View.settings.rows.k(i: Nat, +lc: I.Loc, +u: U.Ui, +st: M.State, +nf: Map<&2
     case 4n: List.concat(&2, D.Node, [[View.setrow("KiCad", U.KN.summary(nf), View.kn.path.loc(lc, u) <> View.kn.loc(lc, U.KN.of(nf, st), False{}))],
       [View.setrow(U.FreeCAD.label.loc(lc, nf), U.FreeCAD.note(lc, nf), Nil{})],
       [View.setrow(U.KiCad.ipc.label(lc, nf), U.KiCad.ipc.note(lc, nf), Bool.pick(List<&2, D.Node>, U.KiCad.ipc.ready(nf), View.chips.loc(lc, ["on", "off"], ipc, "kicad.ipc"), Nil{}))]])
-    case 5n: List.concat(&2, D.Node, [[View.setrow(U.Tail.label(lc, nf), U.Tail.note(lc, nf), Nil{})],
+    case 5n: List.concat(&2, D.Node, [View.deskhub(u), [View.setrow(U.Tail.label(lc, nf), U.Tail.note(lc, nf), Nil{})],
       View.mates(lc, u),
       [View.setrow(MSG.T.settings.pair(lc), U.Pair.note(lc, U.Pair.link(nf)), D.Dom.cat(D.Dom.when(U.Pair.qr.ready(nf), D.Dom.button(Bool.pick(String, U.Ui.flag(u, "pairqr"), "on", ""), "flag", "pairqr", MSG.T.settings.pair.qr.tip(lc), MSG.T.settings.pair.code(lc))),
         D.Dom.when(Bool.not(String.is_empty(U.Pair.link(nf))), D.Dom.copy.loc(lc, U.Pair.link(nf)))))],
@@ -2175,7 +2191,7 @@ def View.entries.r(+lc: I.Loc, es: List<&2, M.Entry>, rs: List<&2, FO.Role>, +st
 # a thread's entries, its runs of tool calls folded (the last stays open
 # while its turn runs)
 def View.entries.shown(+lc: I.Loc, +es: List<&2, M.Entry>, +st: M.State, +sel: String, +info: Map<&2, String>, +running: Bool, +ec: U.Ec) -> List<&2, D.Node>:
-  View.entries.r(lc, es, FO.Fold.roles.loc(lc, es, info, running), st, sel, ec, STP.Stamps.of(es, st, FO.Fold.now(info), running))
+  View.entries.r(lc, es, FO.Fold.roles.loc(lc, es, info, running), st, sel, ec, STP.Stamps.of.s(es, st, FO.Fold.now(info), running, STP.Stamp.stopped(U.Ui.thread(st, sel))))
 
 # Project both loaded and newly received activity at render time; no empty
 # DOM row or timestamp survives an internal delivery receipt.
@@ -2850,7 +2866,7 @@ def View.thread(+lc: I.Loc, +u: U.Ui, t: M.Thread) -> D.Node:
 def View.bot.k(+lc: I.Loc, chat: Bool, +u: U.Ui, +b: BT.Bot, +hd: BI.Head) -> D.Node:
   match chat:
     case True{}:
-      View.thread.h(lc, u, U.Ui.thread(U.Ui.state(u), BT.Bot.thread(b)), [WB.WB.head.loc(lc, u, b, hd), WB.WB.tabs(lc, hd)])
+      View.thread.h(lc, u, U.Ui.thread(U.Ui.state(u), U.Bots.chat.of(U.Ui.state(u), BT.Bot.id(b), BT.Bot.thread(b))), [WB.WB.head.loc(lc, u, b, hd), WB.WB.tabs(lc, hd)])
     case False{}:
       D.El{"main", "bot", [D.At{"class", "thread-view bot-view"}], [WB.WB.head.loc(lc, u, b, hd), WB.WB.tabs(lc, hd), WB.WB.main(lc, u, b, BI.Head.tab(hd))]}
 

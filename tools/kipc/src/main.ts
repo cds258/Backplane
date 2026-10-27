@@ -74,7 +74,7 @@ function socketsAt(requested: string): Map<string, string> {
   return sockets;
 }
 
-function startServer(key: string, argv0: string[], memory?: string) {
+function startServer(key: string, argv0: string[], memory?: string, environment?: Record<string, string>) {
   const argv = wrap(argv0.map(nativePath), memory);
   const tail: string[] = [];
   const keep = (l: string) => {
@@ -91,7 +91,13 @@ function startServer(key: string, argv0: string[], memory?: string) {
   const socketArg = argv0.indexOf("--socket");
   const at = socketArg >= 0 ? argv0[socketArg + 1] ?? "" : "";
   const before = socketsAt(at);
-  const child = spawn(argv[0], argv.slice(1), { stdio: ["ignore", "pipe", "pipe"] });
+  // The helper may predate a runtime selection. Carry the selected managed
+  // paths on each spawn, including across a systemd scope and on Windows.
+  const env = { ...process.env };
+  for (const name of ["BACKPLANE_KICAD_LIBRARY", "KICAD_CONFIG_HOME"]) {
+    if (environment?.[name]) env[name] = nativePath(environment[name]);
+  }
+  const child = spawn(argv[0], argv.slice(1), { stdio: ["ignore", "pipe", "pipe"], env });
   child.on("error", (e) => end(127, String(e.message ?? e)));
   // KiCad buffers stdout on a pipe. Report its freshly bound socket,
   // then the hub still requires Ping and a matching GetVersion.
@@ -138,9 +144,11 @@ async function handle(line: string) {
     return out({ id, ok: true });
   }
   if (r.op === "spawn") {
-    const o = r as unknown as { key?: string; argv?: string[]; memory?: string };
+    const o = r as unknown as { key?: string; argv?: string[]; memory?: string; env?: Record<string, string> };
     if (!o.key || !Array.isArray(o.argv) || !o.argv.length) return fail(id, "spawn needs key and argv");
-    startServer(o.key, o.argv, o.memory);
+    if (o.env && (typeof o.env !== "object" || Array.isArray(o.env) || Object.entries(o.env).some(([k,v]) =>
+      !["BACKPLANE_KICAD_LIBRARY", "KICAD_CONFIG_HOME"].includes(k) || typeof v !== "string" || v.includes("\0")))) return fail(id, "invalid KiCad environment");
+    startServer(o.key, o.argv, o.memory, o.env);
     return out({ id, ok: true });
   }
   if (!r.type) return fail(id, "no type");

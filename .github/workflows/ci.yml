@@ -28,6 +28,7 @@ jobs:
           python3 test/tools/service_runtime_test.py
           python3 test/tools/release_bootstrap_test.py
           python3 test/tools/release_assets_test.py
+          python3 test/tools/kicad_library_header_test.py
 
   desktop-install:
     name: Linux desktop installer
@@ -165,6 +166,8 @@ jobs:
         run: |
           bun test/tools/js_bake_test.ts
           python3 test/tools/service_release_test.py
+          python3 scripts/kicad-library-header.py build/kicad-library-test.js
+          bun test/tools/kicad_library_test.ts build/kicad-library-test.js
       # the whole of test/smoke.ts (threads, agents), as scripts/smoke.sh
       # runs it
       - name: Full smoke

@@ -259,6 +259,21 @@ enum NativeMessages {
     tag == "ja" ? ("取り消す") : ("Revoke")
   }
 
+  // image.copy
+  static func image_copy(_ tag: String) -> String {
+    tag == "ja" ? ("画像をコピー") : ("Copy image")
+  }
+
+  // image.share
+  static func image_share(_ tag: String) -> String {
+    tag == "ja" ? ("画像を共有") : ("Share image")
+  }
+
+  // image.show
+  static func image_show(_ tag: String) -> String {
+    tag == "ja" ? ("ファイルを表示") : ("Show file")
+  }
+
   // machines.invite
   static func machines_invite(_ tag: String) -> String {
     tag == "ja" ? ("招待") : ("Invite")

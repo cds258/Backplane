@@ -204,6 +204,18 @@ object NativeMessages {
   fun hooks_revoke(tag: String): String =
     if (tag == "ja") ("取り消す") else ("Revoke")
 
+  // image.copy
+  fun image_copy(tag: String): String =
+    if (tag == "ja") ("画像をコピー") else ("Copy image")
+
+  // image.share
+  fun image_share(tag: String): String =
+    if (tag == "ja") ("画像を共有") else ("Share image")
+
+  // image.show
+  fun image_show(tag: String): String =
+    if (tag == "ja") ("ファイルを表示") else ("Show file")
+
   // machines.invite
   fun machines_invite(tag: String): String =
     if (tag == "ja") ("招待") else ("Invite")

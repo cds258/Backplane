@@ -5,6 +5,7 @@ import ./codec.bend as C
 import ./bot.bend as BT
 import ./store.bend as ST
 import ./farsnap.bend as FS
+import ./ref-origin.bend as ORIGIN
 
 # Threads that live on a linked machine (docs/bots.md, "Threads elsewhere").
 #
@@ -104,7 +105,7 @@ def Fr.change(+l: String, c: M.Change) -> Maybe<&2, M.Change>:
     case M.ThreadRenamed{+id, title, at}:
       Some{M.ThreadRenamed{Fr.id(l, id), title, at}}
     case M.MessagePosted{+thread, +msg, role, text, at}:
-      Some{M.MessagePosted{Fr.id(l, thread), Fr.sent(l, msg), role, text, at}}
+      Some{M.MessagePosted{Fr.id(l, thread), Fr.sent(l, msg), role, ORIGIN.Origin.show(text, l), at}}
     case M.MessageFrom{+thread, +msg, +from, kind, ref, at}:
       Some{M.MessageFrom{Fr.id(l, thread), Fr.sent(l, msg), Fr.address(l, from), kind, ref, at}}
     case M.TurnChanged{+thread, state, at}:
@@ -112,7 +113,7 @@ def Fr.change(+l: String, c: M.Change) -> Maybe<&2, M.Change>:
     case M.PendingChanged{+thread, count, at}:
       Some{M.PendingChanged{Fr.id(l, thread), count, at}}
     case M.ActivityLogged{+thread, act, tone, kind, summary, at}:
-      Some{M.ActivityLogged{Fr.id(l, thread), act, tone, kind, summary, at}}
+      Some{M.ActivityLogged{Fr.id(l, thread), act, tone, kind, ORIGIN.Origin.show(summary, l), at}}
     case M.ThreadSettled{+id, manual, at}:
       Some{M.ThreadSettled{Fr.id(l, id), manual, at}}
     case M.ThreadUnsettled{+id, at}:

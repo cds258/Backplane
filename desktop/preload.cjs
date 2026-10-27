@@ -32,14 +32,35 @@ const theme = ipcRenderer.sendSync('desktop:theme-now') === 'light' ? 'light' : 
 const paintTheme = () => document.documentElement.classList.toggle('light', theme === 'light');
 if (document.documentElement) paintTheme();
 else new MutationObserver((_, seen) => { if (document.documentElement) { seen.disconnect();paintTheme(); } }).observe(document, {childList:true});
+// What the Windows app calls its hub ("Windows", "WSL · Ubuntu"): main
+// answers '' elsewhere, and then neither it nor chooseBackend exists, so
+// the page names no hub and Settings has no Hub row.
+const hub = String(ipcRenderer.sendSync('desktop:hub-now') || '').slice(0, 96);
+// the startup screen (main.cjs's Screen), checked as it crosses
+const phases = ['connecting', 'installing', 'install', 'error', 'choose'], named = ['retry', 'install', 'choose'];
+const screen = s => phases.includes(s?.phase) && typeof s.message === 'string' ? {
+  phase: s.phase, message: s.message.slice(0, 2000),
+  offers: (Array.isArray(s.offers) ? s.offers : []).filter(n => named.includes(n)),
+  choices: (Array.isArray(s.choices) ? s.choices : []).slice(0, 64).filter(c => typeof c?.token === 'string' && typeof c.label === 'string')
+    .map(c => ({ token: c.token.slice(0, 80), label: c.label.slice(0, 96), current: c.current === true })),
+} : null;
 contextBridge.exposeInMainWorld('backplaneDesktop', Object.freeze({
   theme,
   themeSeen: value => { if (value === 'light' || value === 'dark') ipcRenderer.send('desktop:theme', value); },
   terminalFocus: active => ipcRenderer.send('desktop:terminal-focus', active === true),
+  image: Object.freeze({
+    local: source => ipcRenderer.invoke('desktop:image-local', source),
+    copy: png => ipcRenderer.invoke('desktop:image-copy', png),
+    reveal: source => ipcRenderer.invoke('desktop:image-reveal', source),
+  }),
   ...(browser ? {browser} : {}),
   chooseFolder: () => ipcRenderer.invoke('desktop:choose-folder'),
   version: () => ipcRenderer.invoke('desktop:version'),
   retry: () => ipcRenderer.invoke('desktop:retry'),
+  ...(hub ? { hub, chooseBackend: () => ipcRenderer.invoke('desktop:choose-backend') } : {}),
+  startup: () => ipcRenderer.invoke('desktop:startup').then(screen),
+  useBackend: token => ipcRenderer.invoke('desktop:use-backend', String(token)),
+  install: () => ipcRenderer.invoke('desktop:install'),
   onFocusAddress: callback => {
     if (typeof callback !== 'function') throw new TypeError('Expected a callback');
     const listener = () => callback();
@@ -48,9 +69,7 @@ contextBridge.exposeInMainWorld('backplaneDesktop', Object.freeze({
   },
   onConnection: callback => {
     if (typeof callback !== 'function') throw new TypeError('Expected a callback');
-    const listener = (_event, data) => {
-      if (['error', 'connecting'].includes(data?.phase) && typeof data.message === 'string') callback({phase:data.phase,message:data.message});
-    };
+    const listener = (_event, data) => { const s = screen(data); if (s) callback(s); };
     ipcRenderer.on('desktop:connection', listener);
     return () => ipcRenderer.removeListener('desktop:connection', listener);
   },

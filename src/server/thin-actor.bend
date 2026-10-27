@@ -93,8 +93,13 @@ def Actor.draft.safe( +valid: Bool, +thread: String, +drafts: J.Json) -> J.Json:
     case False{}: J.Json.obj(Nil{})
     case True{}: Actor.draft.value(J.Json.get(drafts, thread), thread)
 
+# the renderer's own device marks the hub may draw with (thin-host.js's
+# requestSession sends the ones it has, never more)
+def Actor.local.keys() -> List<&2, String>:
+  ["@lang", "@lang.os", "@lang.tag", "@lang.preview", "@local.view", "@local.usage", "@desktop", "@desktop.browser", "@desktop.hub"]
+
 def Actor.local.key(+key: String) -> Bool:
-  Nat.is_lt(U.Keys.pos(["@lang", "@lang.os", "@lang.tag", "@lang.preview", "@local.view", "@local.usage", "@desktop.browser"], key), 7n)
+  Nat.is_lt(U.Keys.pos(Actor.local.keys(), key), List.length(&2, String, Actor.local.keys()))
 
 def Actor.local.bounded(valid: Bool, key: String, text: String, out: J.Json) -> J.Json:
   match valid:
@@ -123,7 +128,7 @@ def Actor.local.copy(xs: List<&2, Sigma<&2, &2, String, _ => String>>, dr: Map<&
 def Actor.safe_input(+st: M.State, +p: J.Json) -> J.Json:
   +thread = V.Target.thread(st, J.Json.get_obj(p, "target"))
   +session = J.Json.get_obj(p, "session")
-  +drafts = Actor.local.input(["@lang", "@lang.os", "@lang.tag", "@lang.preview", "@local.view", "@local.usage", "@desktop.browser"], J.Json.get_obj(session, "drafts"), Actor.draft.safe(Bool.and(Bool.not(String.is_empty(thread)), Bool.not(String.starts_with(thread, "@"))), thread, J.Json.get_obj(session, "drafts")))
+  +drafts = Actor.local.input(Actor.local.keys(), J.Json.get_obj(session, "drafts"), Actor.draft.safe(Bool.and(Bool.not(String.is_empty(thread)), Bool.not(String.starts_with(thread, "@"))), thread, J.Json.get_obj(session, "drafts")))
   V.Obj.put(p, "session", V.Obj.put(V.Obj.put(V.Obj.put(session, "drafts", drafts), "outbox", J.Json.obj(Nil{})), "info",
     J.Json.obj(P.Session.strings(Map.to_list(&2, String, Actor.prefs(Map.to_list(&2, String, P.Session.read.strings(J.Json.get_obj(session, "info"), Map.new(&2, String))), Map.new(&2, String)))))))
 

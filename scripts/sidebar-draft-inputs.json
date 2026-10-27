@@ -7,6 +7,7 @@
   "bridges": [
     "src/server/thin-actor.bend",
     "src/server/thin-view.bend",
+    "src/server/thin-mirror.bend",
     "src/server/thin-sidebar.bend",
     "src/core/sidebar-drafts.bend"
   ],
@@ -27,7 +28,7 @@
     "src/core/cat.bend": "0130231a18e515a94d40d7584d19a9b5a2d1663f9601fbff944bf97e37f9fd6b",
     "src/core/cef.bend": "f2d3fa4c991d0e341620fe634ddb4e08da97f8e471ec46afac0b3de471cc69fb",
     "src/core/charter.bend": "7f906bdea712f6ff6162735c8cc133767ec0f9289c3d0bee6dfedbd4d75ad981",
-    "src/core/client.bend": "d6a33169ff4e405c4a3e98b0897de64cb4bb65ecada3bee4d0e21dada0f32e05",
+    "src/core/client.bend": "11016f80c9047005e05aa3b2217bf4474999bc3a0eb5aa79bf6d190eb60a3ba7",
     "src/core/codec.bend": "33cb35c55f3712a18734e76e1149763001a9388af27948f0da4ead2c13d48b6f",
     "src/core/cron.bend": "6f89a001df0261a25c878616ea66c235e169f7fc1c726d39e695fce8adb57332",
     "src/core/deploy.bend": "ebee4e63a52cf41ae001bebcdbb7fb010ad71c1e04e481292585740d88a39cc4",
@@ -35,7 +36,7 @@
     "src/core/diff.bend": "eb7b53917e3b587cb423379946a9b8da8035c8a39b8b6d8e4f3a819b25a7497d",
     "src/core/emb.bend": "48012888273e4de02f0618ca1f308fc6d87e42499aa1dafe504837c2b14e2904",
     "src/core/fallback.bend": "b8604144a115b0de6f43af2b294f7cf09f6cabb882afb962c13829a21ea50601",
-    "src/core/far.bend": "ef1eb0e9ae47c88d70646812cd9a150ac72510031ab250ac973627b5bfc0ea1e",
+    "src/core/far.bend": "34213adc48c5c62934b938fac3ba580cd791a09b83d46ba757ba2065ce16078a",
     "src/core/farlive.bend": "0fec3c222121256751cf620ad82248a178a7f54581c4f20570fdce2fa0b2e25c",
     "src/core/farsnap.bend": "7a07c3774070be7443dc5c0a9143f496767147cf0caac9fd916e3255466c005b",
     "src/core/fm.bend": "a25fe30ac6ac70ca63add2b335aaf49d38b5dba5994941022cd068eb3392913d",
@@ -56,20 +57,20 @@
     "src/core/kihealth.bend": "0f31f804fddef557d7a038dd39022219455d5b9e0990fa19ccef5a388e511460",
     "src/core/kserve.bend": "f375590578eaba849f6523cbf5719da104ac0073f4adcbfd7c0b7157bd1f2100",
     "src/core/layers.bend": "42ba4e35fa04e920a5aaa436b304b4ce07b8b3ba3fc569cd2bdec37630b5a551",
-    "src/core/links.bend": "730e2e9f83224660d022c55f1292a2a8f05ba96518f3a6637c94fb2ab3358b7f",
+    "src/core/links.bend": "e28c39c946a7103c45d5f3840ce8212d5bc6f3a2fa7148027d7ccb32e6d126b2",
     "src/core/live.bend": "e52a258ce2588fb93c50dec6e766d81102aa6e97064d4003dc8d4aa4a1c45700",
     "src/core/locks.bend": "f6a91ea3147f84d10c5dfd003659309a7db37020c6cb67133e4e204101df4262",
     "src/core/look.bend": "039d5756adb79dfb55304bdecdfeac0e9fe15a6aeb3b5676a3d1fd0703d6ed8c",
     "src/core/mail.bend": "621fde9e93c646f8a8a0a85b3e25f79dc20b9e71b9277bbf5ae131a628d5c010",
     "src/core/mailcontinuity.bend": "c9dcefe5d1863e11f85c4c522df1695a85b6cffdf89f6ee3cf7a58271ce8805d",
-    "src/core/maildisposition.bend": "a574c6db2c5b064c9b95b5ac48581f955ae97391535c00df2fe161d8eb7fb30c",
+    "src/core/maildisposition.bend": "1d106d14b7d0b967e18609364daceb24e7f515cfa6657fa771067107a8e0ca96",
     "src/core/mailrun.bend": "4b5bd5d9010414a5584fca379f93dd482feafeafcdfbdb0faaaa062a7a1b5bd6",
-    "src/core/mailtriage.bend": "cda0dbb9326e25c819c613c5d3cfcf75db9dca346659b35f33367f265215d53c",
+    "src/core/mailtriage.bend": "93e011d61182cd762ec6cfddce5068aed1f51c1f04584143378540cbbad1eb37",
     "src/core/mailview.bend": "e1cac757c5f34457a745f095642f6675befed68d5b87aae30f14b706dff015b1",
     "src/core/mech.bend": "79fb3307d0d6868a777924d4b934ac8a1671937e265942467f6c60cc4db82efb",
     "src/core/menu.bend": "807668923de70eaabb72ddb760f808cbf6d786b70822ba6a1180776758af7eee",
-    "src/core/model.bend": "5a67e9bdca81f35c2f151c541277b117600eaf352b38e0b99ccea3f6abe9eadf",
-    "src/core/msgs.bend": "241850824d1c247fd4ee5b3b593a8731f6dac1280842e8c7c4d74e6ea831a0ce",
+    "src/core/model.bend": "3d66f2339799f2dc8c5353f9e45066b79fc5a401cc59a9f6fdf6dfd7916c8c71",
+    "src/core/msgs.bend": "dfc361d44ee34a12f8ba8628498032f6943668c3428c00db25ef9cb7477f4f3c",
     "src/core/notice.bend": "ee87318c1f12fc6cfb23bb5e24e90709e1f9a2eadfd2832581d21590f596e5e0",
     "src/core/onboard.bend": "55ccccf20f706a0acad492de20e23aedc751c7e9ce61b6f3430bfd65796e9232",
     "src/core/once.bend": "c12f375e09045a035cfc66c87d73197f3348b2998fa0e0bb6c9876fca870577c",
@@ -77,8 +78,9 @@
     "src/core/outbox.bend": "7e90d003d01434d86c041b83d837f8a85d9f39c7ae380d840e07bb141f3dd677",
     "src/core/plane.bend": "b6a488af9db204ab580d52b3dc438239141722eb955be21a2bf92aceb4ba8702",
     "src/core/presentation.bend": "d45548e844aeb3a3d36e4fda89bb8b8c48c8366c06fcf5114b5b38df548823d9",
-    "src/core/prompt.bend": "2c313b35a6ed46d1c7a4ea11be1e2eb4d3d56b6e104e9a88a176793d43c3404a",
+    "src/core/prompt.bend": "6ecdb20260b8d54caeb63233b7c5568eddbe827cbca74fff54d2ed6dcfb78774",
     "src/core/qr.bend": "42aae4f454bbf55b201e8913e517b6dec531424b6cace582a4726e189636fbcc",
+    "src/core/ref-origin.bend": "933dae7741d19f4c68b3d34de827fe42f490deb222282e4e185640a0eb4677fa",
     "src/core/ref.bend": "fa2dd3c0a4e9865ac9b185680361c681ce187f625a315e560f3a289e651e90f7",
     "src/core/refs.bend": "052e9f525c04702c23343756f4e7a4dc51060c42a0a0356c5e535f79ebe0ea4c",
     "src/core/refview.bend": "aad18d93039af1c4b83cd245200c051192609bf1a3a7dc261d2b2f4c1dbf97c0",
@@ -98,11 +100,11 @@
     "src/core/signal.bend": "b0c3979e7eaad7dc5c7a052027ea44b03af3d125d45e4a837fed5ec7b4e4db07",
     "src/core/slash.bend": "4b88f73566a9b3694a888ede21f2117157df9449c50c52806648e4795d298932",
     "src/core/space.bend": "0caea2f71303b476291b0e9570459ce12c8fe58b81aefccb2bd935fe4bd56c3a",
-    "src/core/stamp.bend": "020fec0e5b194f586158b422bfe796338209dc7171f69a9cf08ed951f5c8780a",
+    "src/core/stamp.bend": "c1646ac6e545888f378e531b2e731acb4a6a49cb902283c5a101371ee7a6ad73",
     "src/core/store.bend": "037f48017d9b9c1b6ed24d750bc898dc62200635d95fecc627f2196fd79d89d5",
     "src/core/strokefont.bend": "a5d15a2a0c28e9b24673d41bd31a283b8b9df71b1d40524b4bfb689b3ff964bb",
     "src/core/subs.bend": "695a9eedce4bbc7eafd13a9435c77d33a3066f8a2d961086200ca08f91a37a0f",
-    "src/core/subthreads.bend": "cfe0b6f88ea531df432f58a4940ca85be5c1133557759efe2b45cde5360e42bd",
+    "src/core/subthreads.bend": "13e42cf12eee61526c333a91d15e18c29319906c6c486b9e4c06bf81d379b046",
     "src/core/svg.bend": "dc334fd62bc35e0fa3c9cdac414ee563a31f99a3fd538810d42d35c148c30c14",
     "src/core/task.bend": "8280585ed265c028ae6fa6bc72be4b56e527e4f162262e1a4a61401d693457b2",
     "src/core/telemetry.bend": "459638fea434c79b7965a9947ca6e9554208fc7c63c7cadb7f2a22b2e5ce6187",
@@ -124,9 +126,10 @@
     "src/core/vt.bend": "931708652e96ec2db30f3a5a69dc4c90a98e15fc6e5fbbd8e441475626198581",
     "src/core/wake.bend": "074b0501f0db23a207e835beea1de5a5c11dc770287beef06c4d20be0da93a67",
     "src/core/when.bend": "0c97fbba571d99a50a4977c5a3c6916ade1c64196173c20e959d8848d751476f",
-    "src/server/thin-actor.bend": "a6f905638caca37284b41a6ab1dc0c72623111296945a9689f3c0252cb87505f",
+    "src/server/thin-actor.bend": "128f40dd3c19a12a34a3f352596ccba946ee208d116aed1923a8264715337b8c",
+    "src/server/thin-mirror.bend": "b488dc7c45fe49bb1aa17966f454f1ee0e9cfef7db4d619c265c298c9bc94e92",
     "src/server/thin-sidebar.bend": "3f4f103551054d92d10a3d7d355f1b8db948900b83e2942009cb7d0e1e1cf5c7",
-    "src/server/thin-view.bend": "df3890970a844b94fab998c188dce7f666d38de53827ce6d2b0f16cee4f63f47",
+    "src/server/thin-view.bend": "3931f61a1c3ef8985a1cbab0c57c6f617142480022fdce9f58e518a0d4abb2e1",
     "src/web/bots.bend": "b1f06390676fae6bc6fd2170bc3d59da2b56a75f56e8b0df05ff480f7852dcba",
     "src/web/cat.bend": "301a7ba925f92fc25bdc35b63f79bcf8bf7b72619106c826c471247a0ace85ba",
     "src/web/dom.bend": "a564bbb014b7247fc3cd670a427bf13782e8f6217b3c32abadb91efc13d5cf7e",
@@ -138,7 +141,7 @@
     "src/web/space.bend": "b86a265e41a900498bc33c37c0404c4d6678554efe3d9054f329beb2cf35ee63",
     "src/web/usage-graph.bend": "fa06f7d2bf855a396a5f7a7b4725dfaa990145fbbcefe7ad21ae8f9a698a2679",
     "src/web/usage-page.bend": "706e3f17a4a3e5f159656d47aeb76a940d4825421f5c33228f9aef692ec926e3",
-    "src/web/view.bend": "085cff0ad82ed5421043892b95c29f7dbb80410bf2cc4b05fcb8b274effb1b78"
+    "src/web/view.bend": "b08518b37602d2a5578bdc4d46b4438a3d2e36e5430b763cc8b8215056f72fee"
   },
   "review": {
     "source": "5f19ea0b9dbcff736e51ced0cb79e19bfef5bba6",
@@ -192,7 +195,73 @@
       "scope": "view.bend's sidebar head gains one static button (side-toggle) and the workspace rail one (rail-toggle); both carry fixed attributes and read no Ui, draft or @ field. The fold itself is host.js layout state on <html> (localStorage), outside the sidebar image and its key. Reviewed sidebar draft readers unchanged; 24 full-output draft/IME/search/info fallback cases passed on current source.",
       "fullOutputCheck": "test/sidebar_draft_image_test.bend",
       "assertions": 24
+    },
+    "selectedMirrorRead": {
+      "base": "8b90004bc1d9134e95f43b8c1c350a462dfdffdf",
+      "scope": "Selected mirror metadata and bounded read rows; unchanged860 sidebar functions.24 full-output draft/IME/search/info cases passed. Unknown @ and full picture/main freshness retained.",
+      "fullOutputCheck": "test/sidebar_draft_image_test.bend",
+      "assertions": 24,
+      "mainAdvance": "Latest main preserved; affected24 full-output rerun only. Prior42 mirror cases/laws retained."
+    },
+    "scratchVisibility": {
+      "base": "792f3b570618c7b358db2c72eaa28577c0661dc6",
+      "scope": "New legacy live/history projection reads canonical state, selected id, existing conversation-history flag and retained @f.pq. No non-@ draft body reads.24 full-output and12 projection cases passed; all unknown @ keys and main/full-picture freshness retained.",
+      "fullOutputCheck": "test/sidebar_draft_image_test.bend",
+      "assertions": 24
+    },
+    "mirrorLinkOrigin": {
+      "base": "073f3ca4d43952b615d40450344559695acd861d",
+      "scope": "Far MessagePosted/ActivityLogged read text only; new pure URI adapter has no UI/draft input. Same873 sidebar reachable functions;24full-output cases passed; unknown @ and main/full-picture freshness unchanged.",
+      "fullOutputCheck": "test/sidebar_draft_image_test.bend",
+      "assertions": 24
+    },
+    "triageToolApprovalRepair": {
+      "base": "41d19f90eac37a58285dd8dbad95cc98faa87db6",
+      "scope": "Only liveownertriage namedtoolflags and privateprompt, no873sidebarreader changes;24affected full-output freshnesscases passed; unknown @ retained",
+      "assertions": 24
+    },
+    "canonicalSaveGuidance": {
+      "base": "38ac5c463fc32504a4f4b60e4915664f60b5140f",
+      "scope": "Only Prompt.board constant guidance string changed; no argument/import/reader/key change. Not reachable from sidebar roots. Conservative reference comparison is not a compiler AST proof.",
+      "reachableFunctions": 873,
+      "fullOutputCheck": "test/sidebar_draft_image_test.bend",
+      "assertions": 24
+    },
+    "imageLightboxLabels": {
+      "state": "reviewed",
+      "base": "3adc36be094e4661e53c32d6f5d8e0a2a7aa3542",
+      "feature": "35f78cc74042a9b75f47faeb04e475a57d14ab3d",
+      "changedClosureFiles": [
+        "src/core/msgs.bend"
+      ],
+      "reachableFunctions": 873,
+      "changedReachableBodies": [],
+      "scope": "Only three added catalog keys and deterministic generated lookup-tree repartition. Existing catalog text and named sidebar labels, draft readers, keys and unknown@ retention are unchanged. Conservative source-reference graph is not a compiler AST proof.",
+      "fullOutputCheck": "test/sidebar_draft_image_test.bend",
+      "assertions": 24
+    },
+    "freshOwnedSettlement": {
+      "changedClosureFiles": [
+        "src/core/model.bend"
+      ],
+      "reachableFunctions": 873,
+      "changedReachableBodies": [],
+      "kind": "Conservative source reference graph, not compiler AST proof. New Shelve helpers are outside sidebar projection; model change is comment-only; draft readers/unknown@ policy unchanged.",
+      "fullOutputAssertions": 24,
+      "sourceSnapshot": "/home/h/Documents/i2cjak/bp-coord/settle-fresh-work/SOURCE-structural-correction.json"
+    },
+    "wslBackend": {
+      "scope": "client.bend gains DeskHub.* (the Windows desktop app's Hub row on Settings' Network page; reads only the scratch @desktop.hub) and Settings.words(5) search words; view.bend's View.deskhub draws that row on the Network page only; links.bend gains the hub's folder shell Folder.* and Explorer in Link.file.open/reveal (hub shell text, never rendered). thin-actor.bend's Actor.local.keys lets the renderer's @desktop and @desktop.hub marks into the actor's drafts: both are @ keys, so they stay inputs to the private sidebar image key like every @ field (the project picker's Choose folder… reads @desktop). No sidebar draft reader added or changed; 24 full-output draft/IME/search/info fallback cases passed on current source.",
+      "check": "test/deskhub_test.bend",
+      "fullOutputCheck": "test/sidebar_draft_image_test.bend",
+      "assertions": 24
+    },
+    "wslPicker": {
+      "scope": "client.bend's project picker: Proj.is_path (one def for Proj.folders and Proj.items.m) also takes a typed Windows path (X:\\..., X:/..., \\\\...) as a path. Picker rows only; no sidebar draft reader added or changed; 24 full-output draft/IME/search/info fallback cases passed on current source.",
+      "check": "test/picker_test.bend",
+      "fullOutputCheck": "test/sidebar_draft_image_test.bend",
+      "assertions": 24
     }
   },
-  "reviewNote": "Queue + native route-only owner pairing + toast polish: conservative127-file closure reviewed, unchanged860 sidebar functions and24 full-output cases; all unknown @ keys/full picture/main drafts preserved. Guard remains fail-closed."
+  "reviewNote": "Fresh owned-work settlement: new Shelve helpers outside unchanged sidebar projection; model comment only. Conservative graph and24 full-output checks retain draft/unknown@/picture semantics."
 }

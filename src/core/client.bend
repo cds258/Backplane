@@ -4636,12 +4636,26 @@ def Proj.items.k(+l: I.Loc, path: Bool, +u: Ui, +q: String, +dir: String, +ns: L
     case False{}:
       Proj.items.q(l, String.is_empty(q), u, q, dir, ns)
 
+# a drive letter, then ":\" or ":/"
+def Proj.drive(+q: String) -> Bool:
+  match q:
+    case SNil{}:
+      False{}
+    case SCon{c, +t}:
+      Bool.and(Char.is_alpha(c), Bool.or(String.starts_with(t, ":\\"), String.starts_with(t, ":/")))
+
+# a typed path, not a filter: /..., ~..., or a Windows one (C:\..., C:/...,
+# \\server\...), which a hub in WSL takes as its own (links.bend's
+# Link.wsl.path.sh) and any other hub refuses as no such folder
+def Proj.is_path(+q: String) -> Bool:
+  Bool.or(Bool.or(String.starts_with(q, "/"), String.starts_with(q, "~")), Bool.or(Proj.drive(q), String.starts_with(q, "\\\\")))
+
 # the folder browser's rows. No filter: add the listed folder (once), the
 # parent, the subfolders. A filter: matching subfolders best first, then
 # creating the typed name (only when no folder has it), then adding. A
-# typed path (/..., ~...) goes there instead
+# typed path (Proj.is_path) goes there instead
 def Proj.folders(+l: I.Loc, +u: Ui) -> List<&2, PItem>:
-  Proj.items.k(l, Bool.or(String.starts_with(Proj.query(u), "/"), String.starts_with(Proj.query(u), "~")), u, Proj.query(u), Proj.dir(u), Proj.entries(u))
+  Proj.items.k(l, Proj.is_path(Proj.query(u)), u, Proj.query(u), Proj.dir(u), Proj.entries(u))
 
 # a path under home written with ~ (as is when home is not known)
 def Proj.tilde(+home: String, +p: String) -> String:
@@ -4756,7 +4770,7 @@ def Proj.items.m(+l: I.Loc, dir: Bool, +u: Ui) -> List<&2, PItem>:
     case True{}:
       Proj.folders(l, u)
     case False{}:
-      Proj.items.p(l, Bool.or(String.starts_with(Proj.query(u), "/"), String.starts_with(Proj.query(u), "~")), String.is_empty(Proj.query(u)), u, Proj.query(u))
+      Proj.items.p(l, Proj.is_path(Proj.query(u)), String.is_empty(Proj.query(u)), u, Proj.query(u))
 
 # what the picker offers. The projects: adding from a folder first, then
 # every project (with a filter: those matching, best first, then adding
@@ -10216,6 +10230,31 @@ def RefNav.copy.web(m: Maybe<&2, R.Ref>, +u: Ui) -> Act:
     case None{}: Act{u, Nil{}}
     case Some{r}: RefNav.copy.base(u, r, Ui.info(u, "hub.base"))
 
+# The Windows desktop app's hub (desktop/backend.cjs keeps the choice, the
+# app's startup screen changes it). host.js puts what the app calls it in the
+# scratch "@desktop.hub" ("Windows", "WSL · Ubuntu") in that app alone, so no
+# other client shows the row.
+def DeskHub.label(+u: Ui) -> String:
+  Ui.scratch(u, "@desktop.hub")
+
+def DeskHub.shown.k(+label: String) -> Bool:
+  Bool.not(String.is_empty(label))
+
+def DeskHub.shown(+u: Ui) -> Bool:
+  DeskHub.shown.k(DeskHub.label(u))
+
+def DeskHub.title() -> String:
+  "Hub"
+
+def DeskHub.note(+label: String) -> String:
+  "Runs on " ++ label ++ ". Each hub keeps its own projects and threads; the one you leave keeps running."
+
+def DeskHub.tip() -> String:
+  "Choose where this app's hub runs: Windows or a WSL distro"
+
+def DeskHub.change() -> String:
+  "Change…"
+
 # Settings navigation is client-local; choosing a page never persists a setting.
 # (a page's place here is its number in every client's rows: a new page
 # goes at the end; the menus list them in their own order below)
@@ -10288,7 +10327,7 @@ def Settings.words(i: Nat) -> String:
     case 2n: "agents provider model claude codex grok opencode muse pi omp effort thinking reasoning chain of thought"
     case 3n: "writing titles summaries text model"
     case 4n: "cad kicad freecad ipc path schematic board"
-    case 5n: "network tailscale tailnet pairing pair phone qr machines sync update channel nightly stable version"
+    case 5n: "network tailscale tailnet pairing pair phone qr machines sync update channel nightly stable version hub wsl windows linux distro ubuntu"
     case 6n: "voice microphone dictation transcribe speech openai"
     case 7n: "keys api secrets tokens environment"
     case 8n: "antigravity google gemini sign in"
@@ -12959,6 +12998,19 @@ def Side.legacy.ids(ts: List<&2, M.Thread>, +q: String) -> List<&2, String>:
     case +t <> rest:
       List.append(&2, String, Side.when(Palette.hit(q, Active.title(t)), [M.Thread.id(t)]), Side.legacy.ids(rest, q))
 
+# One list for rendered rows and keyboard destinations, with no duplicate
+# legacy row when the remaining history is expanded or searched.
+def Side.legacy.filtered(ts: List<&2, M.Thread>, +q: String) -> List<&2, M.Thread>:
+  match ts:
+    case Nil{}: Nil{}
+    case +t <> rest:
+      ST.Tree.roots.add(Bool.not(Palette.hit(q, Active.title(t))), t, Side.legacy.filtered(rest, q))
+
+def Side.legacy.shown(+u: Ui) -> List<&2, String>:
+  List.append(&2, String, Side.legacy.ids(ST.Legacy.live(Ui.state(u), Ui.sel(u)), Ui.scratch(u, "@f.pq")),
+    Side.when(Bool.or(Ui.flag(u, "conversation-history"), Bool.not(String.is_empty(Ui.scratch(u, "@f.pq")))),
+      Side.legacy.ids(ST.Legacy.history(Ui.state(u), Ui.sel(u)), Ui.scratch(u, "@f.pq"))))
+
 def Side.visible.kind(active: Bool, +u: Ui) -> List<&2, String>:
   match active:
     case True{}:
@@ -12968,7 +13020,7 @@ def Side.visible.kind(active: Bool, +u: Ui) -> List<&2, String>:
 
 def Side.visible(+u: Ui) -> List<&2, String>:
   List.append(&2, String, Side.visible.kind(String.eq(Side.view(Ui.state(u)), "active"), u),
-    Side.when(Bool.or(Ui.flag(u, "conversation-history"), Bool.not(String.is_empty(Ui.scratch(u, "@f.pq")))), Side.legacy.ids(ST.Legacy.threads(Ui.state(u)), Ui.scratch(u, "@f.pq"))))
+    Side.legacy.shown(u))
 
 # Navigation counts exactly the current project's visible rows, in the
 # same order as the selected sidebar mode and its expanded branches.
@@ -13013,8 +13065,7 @@ def Side.here.kind(active: Bool, +u: Ui, +ix: SIx, +pid: String) -> List<&2, Str
 
 def Side.here.ix(+u: Ui, +ix: SIx) -> List<&2, String>:
   List.append(&2, String, Side.here.kind(String.eq(Side.view(Ui.state(u)), "active"), u, ix, Side.cur(u)),
-    Side.in_project(Side.when(Bool.or(Ui.flag(u, "conversation-history"), Bool.not(String.is_empty(Ui.scratch(u, "@f.pq")))),
-      Side.legacy.ids(ST.Legacy.threads(Ui.state(u)), Ui.scratch(u, "@f.pq"))), Ui.state(u), Side.cur(u)))
+    Side.in_project(Side.legacy.shown(u), Ui.state(u), Side.cur(u)))
 
 def Uber.chat.k(none: Bool, +u: Ui, id: String) -> Act:
   match none:

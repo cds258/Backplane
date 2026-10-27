@@ -67,7 +67,7 @@ function preload({word,early}){
  return{api:exposed.backplaneDesktop,classes,sent,syncs,parse,observer:()=>observer};
 }
 test('preload paints the kept theme on <html> at once, or as soon as <html> exists',()=>{
- const a=preload({word:'light',early:true});assert(a.classes.has('light'));assert.equal(a.api.theme,'light');assert.deepEqual(a.syncs,['desktop:theme-now']);
+ const a=preload({word:'light',early:true});assert(a.classes.has('light'));assert.equal(a.api.theme,'light');assert.deepEqual(a.syncs,['desktop:theme-now','desktop:hub-now']);
  const b=preload({word:'light',early:false});assert(!b.classes.has('light'));b.parse();assert(b.classes.has('light'));assert(b.observer().off);
  for(const word of ['dark','system',undefined,'LIGHT']){const c=preload({word,early:true});assert(!c.classes.has('light'));assert.equal(c.api.theme,'dark');}
 });

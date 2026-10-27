@@ -38,3 +38,21 @@ The helpers are separate Windows programs, built from Linux with Bun
 installs the Claude and Codex CLIs; `scripts/setup-windows.ps1` installs the
 Cygwin shell tools (bash, git, coreutils) that shell commands the hub runs
 still expect.
+
+## A hub in WSL
+
+The desktop app can run its hub in a WSL distro instead of its own
+(desktop/README.md, "A hub in WSL"). That hub is the Linux install, hub only.
+On a hub where `wslpath` answers, a folder given as `C:\…`, `C:/…` or
+`\\wsl.localhost\…` is the distro's own path, and one `wslpath` refuses
+(another distro's, a share) is "not a folder this hub can open" (links.bend's
+`Link.wsl.path.sh`, run first by the folder shell `Folder.*`). Open and Show
+in folder hand the file to Windows Explorer, before the `$DISPLAY` check that
+WSLg would pass (`Link.file.explorer`); `BACKPLANE_OPEN` still wins.
+
+Measured with WSL 2 in mirrored networking: the app reaches the hub at
+127.0.0.1; the hub under the app's detached `wsl.exe` still answers after the
+app's process is stopped; Electron reads `hub.lock` and `token` over
+`\\wsl.localhost` in 3-4 ms. Windows cannot bind a port in the distro's
+ephemeral range (`/proc/sys/net/ipv4/ip_local_port_range`). NAT networking is
+untested.

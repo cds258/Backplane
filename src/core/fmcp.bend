@@ -75,7 +75,7 @@ def Fm.projects(ps: List<&2, M.Project>) -> List<&2, J.Json>:
     case Nil{}:
       Nil{}
     case M.Project{+i, +t, +r, _, rm} <> rest:
-      Fm.keep(Bool.not(rm), J.Json.obj([J.KV{"id", J.Str{i}}, J.KV{"name", J.Str{t}}, J.KV{"folder", J.Str{r}}]), Fm.projects(rest))
+      Fm.keep(Bool.and(Bool.not(rm), Bool.not(M.Scratch.is(FR.Fr.local(i)))), J.Json.obj([J.KV{"id", J.Str{i}}, J.KV{"name", J.Str{t}}, J.KV{"folder", J.Str{r}}]), Fm.projects(rest))
 
 def Fm.proj.rows(+s: M.State) -> List<&2, J.Json>:
   match s:
@@ -467,6 +467,11 @@ def Fm.plan.pi(m: Maybe<&2, FR.In>, +word: String, +tool: String, +thread: Strin
 def Fm.plan.pw(+word: String, +ins: List<&2, FR.In>, +tool: String, +thread: String, a: J.Json) -> Plan:
   Bool.pick(Plan, String.is_empty(word), PHere{}, Fm.plan.pi(XR.Xref.pick(ins, RF.Slug.of(word)), word, tool, thread, a))
 
+# Reject retired targets before a remote request or an offline queue entry.
+def Fm.plan.launch(+s: M.State, +ins: List<&2, FR.In>, +tool: String, +thread: String, +a: J.Json) -> Plan:
+  Bool.pick(Plan, MC.Mcp.launch.retired_id(FR.Fr.local(J.Json.get_str(a, "project", ""))),
+    PAnswer{MC.Res.fail(MC.Mcp.launch.retired_message())}, Fm.plan.w(Fm.word(5n, a), ins, tool, thread, a))
+
 def Fm.plan.k(i: Nat, +s: M.State, +ins: List<&2, FR.In>, +tool: String, +thread: String, +a: J.Json) -> Plan:
   match i:
     case 12n:
@@ -481,6 +486,8 @@ def Fm.plan.k(i: Nat, +s: M.State, +ins: List<&2, FR.In>, +tool: String, +thread
       Fm.plan.read(Fm.word(i, a), ins, tool, thread, a)
     case 7n:
       PAnswer{Fm.machines(s, ins)}
+    case 5n:
+      Fm.plan.launch(s, ins, tool, thread, a)
     case _:
       Fm.plan.w(Fm.word(i, a), ins, tool, thread, a)
 

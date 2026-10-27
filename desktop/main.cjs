@@ -6,6 +6,8 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const os = require('node:os');
 const { Service } = require('./service.cjs');
+const { WINDOWS, readBackend, writeBackend, labelBackend, parseBackend, showBackend, choicesFor } = require('./backend.cjs');
+const wsl = require('./wsl.cjs');
 const { createBrowserUnknownState } = require('./browser-dispatch.cjs');
 const { createDesktopBrowserController } = require('./browser-controller.cjs');
 const { createBrowserActions } = require('./browser-actions.cjs');
@@ -13,6 +15,7 @@ const { exactObject } = require('./browser-wire.cjs');
 const { createHash } = require('node:crypto');
 const fs = require('node:fs');
 const { createConnectionLog } = require('./connection-log.cjs');
+const { createImageActions, installImageMenu } = require('./image-actions.cjs');
 
 // Checkout launches always name an isolated home. Packaging supplies its
 // explicit product configuration after root's integration review.
@@ -33,12 +36,21 @@ const rendererBrowser=directBrowser&&build.desktopBrowser?.rendererBridge!==fals
 if(directBrowser)process.env.BACKPLANE_DESKTOP_BROWSER='1';
 // Main/home lifetime, including window/controller replacement. No reset API.
 const browserUnknown=createBrowserUnknownState();
-const service = new Service({ home, binary: process.env.BACKPLANE_SERVICE || (app.isPackaged ? path.join(resourceRoot, process.platform === 'win32' ? 'backplane-serve.exe' : 'backplane-serve') : undefined), web: process.env.BACKPLANE_WEB || (app.isPackaged ? path.join(resourceRoot, 'web') : undefined), expectedVersion: process.env.BACKPLANE_SERVICE_VERSION || build.serviceVersion, residentService: build.lifecyclePolicy?.mode === 'resident-service' });
+const nativeService = new Service({ home, binary: process.env.BACKPLANE_SERVICE || (app.isPackaged ? path.join(resourceRoot, process.platform === 'win32' ? 'backplane-serve.exe' : 'backplane-serve') : undefined), web: process.env.BACKPLANE_WEB || (app.isPackaged ? path.join(resourceRoot, 'web') : undefined), expectedVersion: process.env.BACKPLANE_SERVICE_VERSION || build.serviceVersion, residentService: build.lifecyclePolicy?.mode === 'resident-service' });
 const startupPath = path.join(__dirname, 'startup.html');
 const startupURL = pathToFileURL(startupPath).href;
 const launchedAtMs = Date.now();
-let window, origin, connection, serviceReadyAtMs, firstVisibleAtMs, connecting;
+let window, origin, connection, serviceReadyAtMs, firstVisibleAtMs;
+// The hub this app talks to: its own native one, or (Windows only) the hub
+// in a WSL distro (backend.cjs). A checkout's app, or one given
+// BACKPLANE_HOME, is isolated: it must name its own distro home and prefix.
+const offersWsl = process.platform === 'win32';
+const isolated = !app.isPackaged || !!process.env.BACKPLANE_HOME;
+const backendFile = path.join(app.getPath('userData'), 'backend');
+let backend = offersWsl ? readBackend(backendFile) : WINDOWS;
+let service = nativeService, dialogStart;
 let desktopBrowser;
+const imageActions = createImageActions({ electron, origin: () => origin });
 let quitting = false;
 let terminalFocused = false;
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -74,28 +86,94 @@ ipcMain.on('desktop:terminal-focus', (event, active) => {
 function external(url) {
   try { const parsed = new URL(url); if (['https:', 'http:', 'mailto:'].includes(parsed.protocol) && !parsed.username && !parsed.password) void shell.openExternal(parsed.href); } catch {}
 }
-function status(phase, message) {
-  if (window && !window.isDestroyed()) window.webContents.send('desktop:connection', { phase, message });
+/**
+ * The startup screen, one value: startup.js draws exactly it, and reads it
+ * on load (desktop:startup) so a push sent before it listened is not lost.
+ * @typedef {{phase:'connecting'|'install'|'installing'|'error'|'choose', message:string,
+ *   offers:('retry'|'install'|'choose')[], choices?:{token:string, label:string, current:boolean}[]}} Screen
+ */
+let screen = { phase: 'connecting', message: 'Connecting to your service…', offers: [] };
+function show(next) {
+  screen = next;
+  if (window && !window.isDestroyed()) window.webContents.send('desktop:connection', next);
 }
-async function connect(ses) {
-  if (connecting) return connecting;
-  connecting = (async () => {
-    try {
-      connection = await service.start(); origin = connection.origin; serviceReadyAtMs = Date.now();
-      // Credential material stays in main and the service's HttpOnly cookie.
-      const response = await ses.fetch(`${origin}/auth/pair`, { method: 'POST', credentials: 'include', headers: { Authorization: `Bearer ${await service.token()}` }, redirect: 'error' });
-      if (!response.ok) throw new Error('Could not authenticate with the service');
-      if (!quitting && window && !window.isDestroyed()) await window.loadURL(origin);
-      // The in-app browser starts only after the UI is up and never holds it:
-      // a hub that does not serve it (started by systemd, --headless or an
-      // older install), or one that never answers, leaves the browser
-      // unavailable with Reconnect (desktop:browser-reconnect) and nothing else.
-      if(directBrowser)void connectBrowser(ses).catch(()=>{});
-    } catch (error) {
-      status('error', error.message);
-    } finally { connecting = null; }
-  })();
-  return connecting;
+const offers = (...names) => names.filter(n => n !== 'choose' || offersWsl);
+// One attempt per backend at a time: a Retry or a second pick of the same
+// hub joins the one in flight; a pick of another hub starts at once, beside
+// a stuck one (a cold or broken distro takes a minute to give up). An
+// attempt acts only while its hub is still the chosen one and no chooser is up.
+const attempts = new Map();
+let choosing = false, installing = null, offered = new Set();
+const chosen = b => !choosing && showBackend(b) === showBackend(backend);
+function connect(ses) {
+  const token = showBackend(backend);
+  if (!attempts.has(token)) attempts.set(token, attempt(ses, backend).finally(() => attempts.delete(token)));
+  return attempts.get(token);
+}
+async function attempt(ses, target) {
+  try {
+    let next = nativeService, browse;
+    if (target.kind === 'wsl') {
+      if (chosen(target)) show({ phase: 'connecting', message: `Starting ${target.distro}…`, offers: [] });
+      const hub = await wsl.wslHub({ distro: target.distro, paths: wsl.wslPaths(process.env, isolated) });
+      next = new Service({ home: hub.home, host: hub.host }); browse = hub.browse;
+      if (chosen(target)) show({ phase: 'connecting', message: 'Connecting to your service…', offers: [] });
+    }
+    const found = await next.start();
+    if (!chosen(target)) return;
+    service = next; dialogStart = browse; connection = found; origin = found.origin; serviceReadyAtMs = Date.now();
+    // Credential material stays in main and the service's HttpOnly cookie.
+    const response = await ses.fetch(`${origin}/auth/pair`, { method: 'POST', credentials: 'include', headers: { Authorization: `Bearer ${await service.token()}` }, redirect: 'error' });
+    if (!response.ok) throw new Error('Could not authenticate with the service');
+    if (!chosen(target)) return;
+    if (!quitting && window && !window.isDestroyed()) await window.loadURL(origin);
+    // The in-app browser starts only after the UI is up and never holds it:
+    // a hub that does not serve it (started by systemd, --headless or an
+    // older install), or one that never answers, leaves the browser
+    // unavailable with Reconnect (desktop:browser-reconnect) and nothing else.
+    if(directBrowser)void connectBrowser(ses).catch(()=>{});
+  } catch (error) {
+    if (!chosen(target)) return;
+    if (error.code === 'ERR_HUB_NOT_INSTALLED') show({ phase: 'install', message: error.message, offers: offers('install', 'choose') });
+    else show({ phase: 'error', message: error.message, offers: offers('retry', 'choose') });
+  }
+}
+// The chooser, on the startup screen: the hub's page goes, and only now is
+// WSL asked for its distros (listing earlier can make Windows offer to
+// install WSL). The current hub is one of the choices: picking it is the way back.
+async function choose() {
+  choosing = true;
+  desktopBrowser?.close(); desktopBrowser = null; origin = undefined; connection = undefined;
+  if (window.webContents.getURL() !== startupURL) await window.loadFile(startupPath);
+  show({ phase: 'choose', message: 'Finding WSL distros…', offers: [], choices: [] });
+  const distros = await wsl.listDistros();
+  if (!choosing) return;
+  const choices = choicesFor(backend, distros);
+  offered = new Set(choices.map(c => c.token));
+  show({ phase: 'choose', message: distros.length ? 'Where should this app’s hub run?'
+    : 'Where should this app’s hub run? There is no WSL distro on this PC (wsl --install adds one).', offers: [], choices });
+}
+// a pick from the chooser on screen; a token it did not offer is refused
+function useBackend(ses, token) {
+  const next = offered.has(token) ? parseBackend(token) : null;
+  if (!next) throw new Error('Not a choice on screen');
+  offered = new Set(); choosing = false;
+  if (showBackend(next) !== showBackend(backend)) { writeBackend(backendFile, next); backend = next; }
+  show({ phase: 'connecting', message: 'Connecting to your service…', offers: [] });
+  return connect(ses);
+}
+// Install in the chosen distro, then connect; a second press joins the one running.
+function installHub(ses) {
+  if (backend.kind !== 'wsl') throw new Error('Install is only for a hub in WSL');
+  if (installing) return installing;
+  const target = backend, says = `Installing Backplane in ${target.distro}…`;
+  show({ phase: 'installing', message: says, offers: [] });
+  installing = (async () => wsl.install({ distro: target.distro, paths: wsl.wslPaths(process.env, isolated), version: app.getVersion(),
+    onLine: line => { if (chosen(target)) show({ phase: 'installing', message: `${says} ${line}`, offers: [] }); } }))()
+    .then(() => { if (chosen(target)) return connect(ses); },
+      error => { if (chosen(target)) show({ phase: 'install', message: `Install failed: ${error.message}`, offers: offers('install', 'choose') }); })
+    .finally(() => { installing = null; });
+  return installing;
 }
 // one attempt at a time: the start after load and a Reconnect share it
 let browserStarting=null;
@@ -140,14 +218,34 @@ function start() {
     if (!trusted(event)) throw new Error('Invalid sender');
     return { electron: process.versions.electron, service: connection.version, launchedAtMs, firstVisibleAtMs, serviceReadyAtMs };
   });
+  const fromStartup = event => senderIsWindow(event) && event.senderFrame.url === startupURL;
   ipcMain.handle('desktop:retry', event => {
-    if (!senderIsWindow(event) || event.senderFrame.url !== startupURL) throw new Error('Invalid sender');
+    if (!fromStartup(event)) throw new Error('Invalid sender');
     void connect(ses); return true;
   });
+  // what the Settings row calls the hub; '' outside the Windows app (no row)
+  ipcMain.on('desktop:hub-now', event => {
+    event.returnValue = offersWsl && (fromStartup(event) || trusted(event)) ? labelBackend(backend) : '';
+  });
+  ipcMain.handle('desktop:startup', event => { if (!fromStartup(event)) throw new Error('Invalid sender'); return screen; });
+  ipcMain.handle('desktop:choose-backend', event => {
+    if (!offersWsl || !(fromStartup(event) || trusted(event))) throw new Error('Invalid sender');
+    void choose(); return true;
+  });
+  ipcMain.handle('desktop:use-backend', (event, token) => {
+    if (!fromStartup(event) || typeof token !== 'string') throw new Error('Invalid sender');
+    void useBackend(ses, token); return true;
+  });
+  ipcMain.handle('desktop:install', event => { if (!fromStartup(event)) throw new Error('Invalid sender'); void installHub(ses); return true; });
+  // a hub in WSL: the dialog starts in the distro user's home (\\wsl.localhost\<distro>\home\<user>)
   ipcMain.handle('desktop:choose-folder', async event => {
     if (!trusted(event)) throw new Error('Invalid sender');
-    const result = await dialog.showOpenDialog(window, { properties: ['openDirectory'] });
+    const result = await dialog.showOpenDialog(window, { properties: ['openDirectory'], ...(dialogStart ? { defaultPath: dialogStart } : {}) });
     return result.canceled ? null : result.filePaths[0];
+  });
+  for (const operation of ['local', 'copy', 'reveal']) ipcMain.handle('desktop:image-' + operation, (event, value) => {
+    if (!trusted(event)) throw new Error('Invalid image sender');
+    return imageActions[operation](value);
   });
   ipcMain.handle('desktop:browser-present',(event,value)=>{
     if(!trusted(event)||!directBrowser)throw new Error('Invalid Browser sender');
@@ -166,7 +264,7 @@ function start() {
   // failed. Query the current state instead of depending on a one-shot event.
   ipcMain.handle('desktop:browser-state',event=>{if(!trusted(event)||!directBrowser)throw new Error('Invalid Browser sender');return desktopBrowser?.state()??{phase:'connecting',message:'Connecting Browser…'};});
   ipcMain.handle('desktop:browser-reconnect',async event=>{if(!trusted(event)||!directBrowser)throw new Error('Invalid Browser sender');await connectBrowser(ses,true);return desktopBrowser?.state()??{phase:'error',message:'Browser unavailable'};});
-  Menu.setApplicationMenu(applicationMenu(Menu, process.platform));
+  Menu.setApplicationMenu(applicationMenu(Menu, process.platform, offersWsl ? () => void choose() : null));
   app.setAppUserModelId?.('works.backplane.desktop');
   if (process.platform === 'darwin') app.dock?.setIcon(iconPath());
   void createWindow(ses).then(() => connect(ses)); // Show before any service/history work.
@@ -180,7 +278,10 @@ function createWindow(ses) {
     if (!details.frame || details.frame === window.webContents.mainFrame) connectionLog.capture(details.message ?? legacyMessage);
   });
   window.setMenuBarVisibility(false);
-  installShortcuts(window, electron, () => directBrowser ? desktopBrowser : null, process.platform, () => terminalFocused);
+  installImageMenu(window, { electron, actions: imageActions, trusted: params => {
+    try { return params.frame === window.webContents.mainFrame && new URL(params.pageURL).origin === origin && new URL(params.frameURL).origin === origin; } catch { return false; }
+  } });
+  installShortcuts(window, electron, () => directBrowser ? desktopBrowser : null, process.platform, () => terminalFocused, offersWsl ? () => void choose() : null);
   window.webContents.on('did-start-navigation', () => { terminalFocused = false; });
   window.webContents.on('blur', () => { terminalFocused = false; });
   const shown = new Promise(resolve => window.once('ready-to-show', () => { firstVisibleAtMs ??= Date.now(); window.show(); resolve(); }));

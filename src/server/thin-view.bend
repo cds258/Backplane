@@ -6,6 +6,7 @@ import ../core/botui.bend as BI
 import ../core/client.bend as U
 import ../core/presentation.bend as P
 import ../core/thin.bend as T
+import ../core/far.bend as FR
 import ../core/hub.bend as HB
 import ../core/subs.bend as SB
 import ../core/thin-live.bend as TL
@@ -141,8 +142,15 @@ def Message.whole.e(+st: M.State, +row: T.Row, +e: M.Entry) -> T.Row:
     case M.Msg{+id, _, _, +text, +at}: Message.whole.k(row, HB.Lr.whole(st, id, text, at))
     case _: row
 
+# A mirror row already carries its owner's body. Never repair it from a
+# same-named local launch receipt, which belongs to another source.
+def Message.whole.source(far: Bool, +st: M.State, +row: T.Row) -> T.Row:
+  match far:
+    case True{}: row
+    case False{}: Message.whole.e(st, row, T.Row.entry(row))
+
 def Message.whole(+st: M.State, +row: T.Row) -> T.Row:
-  Message.whole.e(st, row, T.Row.entry(row))
+  Message.whole.source(FR.Fr.is(M.Idx.thread(T.Row.entry(row))), st, row)
 
 # the window's entries: each row as shown (T.Row.preview), a report stored
 # cut short whole again (Message.whole), so no message reads cut

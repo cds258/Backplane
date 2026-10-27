@@ -365,6 +365,8 @@ sched.weekdays = weekdays at {time}
 # message times
 stamp.finished = Finished {clock}
 stamp.finished.took = Finished {clock} · {took}
+stamp.stopped = Stopped {clock}
+stamp.stopped.took = Stopped {clock} · {took}
 
 # subagent states
 state.running = running
@@ -1295,3 +1297,7 @@ secret.vault.keyring = Sealed with this computer's keychain.
 secret.vault.file = Sealed with a key file on this machine (no keychain answered).
 secret.vault.locked = The vault is locked: {why}
 secret.open.tip = Give an agent a secret without pasting it into the chat
+
+image.copy = Copy image
+image.show = Show file
+image.share = Share image

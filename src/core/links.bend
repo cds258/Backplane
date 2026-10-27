@@ -157,12 +157,29 @@ def Link.file.sh() -> String:
 def Link.file.desk() -> String:
   "[ -n \"$DISPLAY$WAYLAND_DISPLAY\" ] || { echo \"No desktop on this machine to open it on\"; exit 1; }; "
 
+# A Windows path ("C:\x", "C:/x", "\\wsl.localhost\<distro>\x") is, on a hub
+# in WSL (wslpath answers), the Linux path of the same folder; elsewhere it
+# stays as typed. $d in and out, $1 the folder as asked. A path wslpath
+# cannot place (another distro's, a network share) is refused.
+def Link.wsl.path.sh() -> String:
+  "case \"$d\" in [A-Za-z]:/*|[A-Za-z]:'\\'*|'\\\\'*) if command -v wslpath >/dev/null 2>&1; then d=$(wslpath -u \"$d\" 2>/dev/null) || { printf 'not a folder this hub can open: %s\\n' \"$1\"; exit 2; }; fi;; esac; "
+
+# On a hub in WSL with no BACKPLANE_OPEN, the file opens (or shows) in
+# Windows Explorer, before the $DISPLAY check: WSLg sets it, and the person
+# is on the Windows desktop. Explorer exits 1 whatever happens, so it runs
+# in the background like xdg-open. args go before the file: "/select, " to
+# reveal (as one word "/select,<file>" Explorer opens Documents once the
+# path holds a space, measured).
+def Link.file.explorer(+args: String) -> String:
+  "x=; if [ -z \"${BACKPLANE_OPEN:-}\" ] && command -v wslpath >/dev/null 2>&1; then x=$(command -v explorer.exe 2>/dev/null) || x=\"$(wslpath -u 'C:\\Windows' 2>/dev/null)/explorer.exe\"; [ -x \"$x\" ] || x=; fi; " ++
+  "if [ -n \"$x\" ] && w=$(wslpath -w \"$p\" 2>/dev/null); then (\"$x\" " ++ args ++ "\"$w\" >/dev/null 2>&1 &); exit 0; fi; "
+
 def Link.file.open() -> String:
-  Link.file.sh() ++ "if [ \"$(uname)\" = Darwin ]; then open \"$p\"; exit $?; fi; " ++ Link.file.desk() ++
+  Link.file.sh() ++ Link.file.explorer("") ++ "if [ \"$(uname)\" = Darwin ]; then open \"$p\"; exit $?; fi; " ++ Link.file.desk() ++
   "(${BACKPLANE_OPEN:-xdg-open} \"$p\" >/dev/null 2>&1 &)"
 
 def Link.file.reveal() -> String:
-  Link.file.sh() ++ "if [ \"$(uname)\" = Darwin ]; then open -R \"$p\"; exit $?; fi; " ++ Link.file.desk() ++
+  Link.file.sh() ++ Link.file.explorer("/select, ") ++ "if [ \"$(uname)\" = Darwin ]; then open -R \"$p\"; exit $?; fi; " ++ Link.file.desk() ++
   "u=$(printf %s \"$p\" | sed 's/%/%25/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g'); " ++
   "dbus-send --session --print-reply --reply-timeout=3000 --dest=org.freedesktop.FileManager1 --type=method_call /org/freedesktop/FileManager1 " ++
   "org.freedesktop.FileManager1.ShowItems array:string:\"file://$u\" string:\"\" >/dev/null 2>&1 || " ++
@@ -170,6 +187,29 @@ def Link.file.reveal() -> String:
 
 def Link.file.cmd(+how: String) -> String:
   Bool.pick(String, String.eq(how, "reveal"), Link.file.reveal(), Link.file.open())
+
+# Folders for the project picker: the hub's shell (server.bend's FsJob),
+# the path always its $1, never part of a script.
+
+# $d from $1: "" and ~ are home, ~/x and relative paths are under home; a
+# Windows path is its Linux path on a hub in WSL
+def Folder.path.sh() -> String:
+  "d=\"$1\"; " ++ Link.wsl.path.sh() ++ "case \"$d\" in ''|'~') d=\"$HOME\";; '~/'*) d=\"$HOME/${d#??}\";; /*) ;; *) d=\"$HOME/$d\";; esac; "
+
+# a folder that exists and can be opened, printed resolved (symlinks too)
+def Folder.dir.sh() -> String:
+  "[ -e \"$d\" ] || { echo \"no such folder: $d\"; exit 2; }; [ -d \"$d\" ] || { echo \"not a folder: $d\"; exit 2; }; [ -r \"$d\" ] && [ -x \"$d\" ] && d=$(cd -P -- \"$d\" && pwd -P) || { echo \"cannot open: $d\"; exit 2; }; "
+
+def Folder.list.sh() -> String:
+  "exec 2>&1; set -e; " ++ Folder.path.sh() ++ Folder.dir.sh() ++ "echo \"$d\"; find \"$d\" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sed 's|^.*/||' | LC_ALL=C sort | head -n 5000"
+
+# a new folder (and any missing parents); an existing one is refused
+def Folder.mkdir.sh() -> String:
+  "exec 2>&1; set -e; " ++ Folder.path.sh() ++ "if [ -e \"$d\" ] || [ -L \"$d\" ]; then echo \"already exists: $d\"; exit 3; fi; mkdir -p -- \"$d\"; " ++ Folder.dir.sh() ++ "echo \"$d\""
+
+# the folder a project would have
+def Folder.resolve.sh() -> String:
+  "exec 2>&1; set -e; " ++ Folder.path.sh() ++ Folder.dir.sh() ++ "echo \"$d\""
 
 # Scanning
 # --------

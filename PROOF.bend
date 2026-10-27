@@ -12834,6 +12834,16 @@ def Laws.desktop_unknown_owner_has_no_drive(drive): {==}
 def Laws.desktop_connection_frame_bytes_unchanged(text, version, hub): {==}
 def Laws.desktop_connection_close_bytes_unchanged(text, version, hub): {==}
 
+def Laws.deskhub_hidden(): {==}
+def Laws.deskhub_shown(c, t): {==}
+def Laws.deskhub_row_none(label): {==}
+def Laws.actor_local_desktop(): {==}
+def Laws.actor_local_desktop_hub(): {==}
+def Laws.actor_local_no_forms(): {==}
+def Laws.proj_path_drive(): {==}
+def Laws.proj_path_share(): {==}
+def Laws.proj_path_filter(): {==}
+
 # The focused universal presentation/credit proofs are reused unchanged.
 
 def Laws.presentation_state_kept(u, p): PRESENTPROOF.state_kept(u, p)
@@ -13266,3 +13276,43 @@ def Laws.fq_room_keyed(): {==}
 # ---- end far queue ----
 
 def Laws.queue_copy_refuses_network(): {==}
+
+def Laws.mirror_no_authority(mirrors, thread): {==}
+def Laws.mirror_no_source_state(st, thread): {==}
+def Laws.mirror_local_epoch(epoch): {==}
+def Laws.mirror_changed_basis_anchor(): {==}
+
+def Laws.retired_scratch_launch_refused(s, now, thread, by, p): {==}
+def Laws.retired_scratch_id(): {==}
+def Laws.legacy_active_visible(): {==}
+
+def Laws.ref_origin_no_link(s): {==}
+def Laws.ref_origin_return_local(): {==}
+def Laws.ref_origin_owner_remote(): {==}
+def Laws.ref_origin_foreign_untouched(): {==}
+
+def startup_warm_accepted(w, rows):
+  {==}
+def startup_warm_fallback(w, rows):
+  {==}
+
+def mail_empty_success_quiet(): {==}
+def mail_failed_empty_preserved(): {==}
+def mail_no_triage_grants_outside_run(): {==}
+def mail_silent_bot_envelope(s, now, th, text): {==}
+
+
+def codex_error_notice_kind(): {==}
+def codex_error_notice_no_effects(s, th, now, o): {==}
+
+def Laws.life_fresh_owned_wakes():
+  {==}
+
+def Laws.life_owned_progress_held():
+  {==}
+
+def Laws.life_fresh_child_wakes():
+  {==}
+
+def Laws.life_later_manual_settle_held():
+  {==}

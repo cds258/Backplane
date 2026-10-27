@@ -220,6 +220,7 @@ function thinIntent(key, session, target, action, value) {
       target: plain(App.thin_target(JSON.stringify(next))) };
   }
   if (action === "earlier") return { kind: "page" };
+  if (action === "later") return { kind: "later" };
   if (action === "find-open" && value === "search") return { kind: "find", search: { query: "", rows: [], cursor: "", hasMore: false, visited: 0 } };
   if (action === "find-close") return { kind: "find", search: null };
   if (action === "find-q") return { kind: "search", args: { query: value, cursor: "" } };
@@ -437,6 +438,10 @@ function screenText() {
     const drafts = overlays.map(overlay => plain(App.thin_shown_draft(bendJson(overlay), JSON.stringify(thin.state(overlay.key).session))));
     const screen = plain(App.thin_presentation(hubs, bendJson(drafts), cur));
     screen.locale = nativeLocale;
+    // paged up into the history: how many pages lie below (the native
+    // list's bottom trigger asks for "later"; the host keeps the trail)
+    const back = thin.state(cur)?.back?.length || 0;
+    if (screen.thread && back) screen.thread.later = back;
     return JSON.stringify(screen);
   }
   if (waitingForForeground() && !recent.links.get(cur)?.shown && foregroundPresentation()) return foregroundPresentation();

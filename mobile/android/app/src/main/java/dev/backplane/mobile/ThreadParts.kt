@@ -333,6 +333,22 @@ fun Overlaid() {
 @Composable
 fun Lightbox(url: String, close: () -> Unit) {
     val lang = LocalBackplaneLanguage.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val image = hubImage(url, 2560)
+    var saveError by remember(url) { mutableStateOf(false) }
+    // The system picker grants only the chosen document. Save pixels,
+    // never the authenticated hub URL, with no storage permission.
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
+        if (uri != null) scope.launch {
+            saveError = !withContext(Dispatchers.IO) {
+                runCatching {
+                    val bitmap = (image as? Got.Ok)?.b ?: error("Image unavailable")
+                    context.contentResolver.openOutputStream(uri)?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } == true
+                }.getOrDefault(false)
+            }
+        }
+    }
     Overlaid()
     Dialog(close, DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         var scale by remember { mutableFloatStateOf(1f) }
@@ -350,7 +366,7 @@ fun Lightbox(url: String, close: () -> Unit) {
                     offset = if (scale == 1f) Offset.Zero else offset + pan
                 }
             }) {
-            when (val g = hubImage(url, 2560)) {
+            when (val g = image) {
                 null -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 Got.Failed -> Icon(Icons.Filled.BrokenImage, NativeMessages.native_image_missing(lang), Modifier.align(Alignment.Center), tint = Color.Gray)
                 is Got.Ok -> Image(g.b.asImageBitmap(), NativeMessages.native_image_plain(lang), Modifier.fillMaxSize().graphicsLayer(
@@ -359,6 +375,12 @@ fun Lightbox(url: String, close: () -> Unit) {
             IconButton(close, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp)) {
                 Icon(Icons.Filled.Close, NativeMessages.common_close(lang), tint = Color.White)
             }
+            TextButton(onClick = { saveError = false; save.launch("image.png") }, enabled = image is Got.Ok,
+                modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(8.dp)) {
+                Text(NativeMessages.common_save(lang), color = Color.White)
+            }
+            if (saveError) Text(if (lang == "ja") "画像を保存できませんでした" else "Image could not be saved.",
+                color = Color.White, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp))
         }
     }
 }

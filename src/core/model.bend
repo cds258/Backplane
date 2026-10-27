@@ -27,7 +27,7 @@ type TurnState is Data:
   Interrupted{}
   Failed{}
 
-# A manual settle/unsettle pins the thread's shelf until the other is chosen.
+# A manual settle/unsettle holds the shelf until fresh real work resumes.
 type Override is Data:
   NoOverride{}
   ForcedSettled{}

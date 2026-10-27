@@ -1,8 +1,16 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const {applicationMenu,installShortcuts}=require('../window.cjs');
-test('Linux and Windows have no application menu; macOS keeps only its Backplane system menu',()=>{
-  const Menu={buildFromTemplate:x=>x};assert.equal(applicationMenu(Menu,'linux'),null);assert.equal(applicationMenu(Menu,'win32'),null);
+test('Linux has no application menu, Windows only Change hub…; macOS keeps only its Backplane system menu',()=>{
+  const Menu={buildFromTemplate:x=>x};assert.equal(applicationMenu(Menu,'linux',()=>{}),null);assert.equal(applicationMenu(Menu,'win32'),null);
   assert.deepEqual(applicationMenu(Menu,'darwin').map(x=>x.label),['Backplane']);
+  let changed=0;const win=applicationMenu(Menu,'win32',()=>changed++);const item=win[0].submenu[0];
+  assert.deepEqual([win.length,win[0].submenu.length,item.label,item.accelerator],[1,1,'Change hub…','Ctrl+Shift+H']);item.click();assert.equal(changed,1);
+});
+test('Ctrl+Shift+H opens the chooser of hubs where there is one, and nowhere else',()=>{
+  const press=changeHub=>{let handler,prevented=0;const contents={on:(_e,f)=>handler=f};
+    installShortcuts({webContents:contents},{webContents:{getFocusedWebContents:()=>contents},app:{}},undefined,'win32',()=>false,changeHub);
+    handler({preventDefault(){prevented++;}},{type:'keyDown',key:'H',control:true,shift:true});return prevented;};
+  let changed=0;assert.equal(press(()=>changed++),1);assert.equal(changed,1);assert.equal(press(null),0);
 });
 test('local window shortcuts preserve editing, zoom, reload and window controls',()=>{
   let handler,prevented=0,zoom=0,full=false;const calls=[];

@@ -1,6 +1,7 @@
 import PhotosUI
 import SwiftUI
 import UIKit
+import ImageIO
 import UniformTypeIdentifiers
 
 // The pieces of a thread and the sheets over it. Every label, value and
@@ -96,13 +97,18 @@ struct Lightbox: View {
     @State private var base: CGFloat = 1
     @State private var offset: CGSize = .zero
     @State private var moved: CGSize = .zero
+    @State private var bitmap: UIImage?
+    @State private var failed = false
 
     var body: some View {
         NavigationStack {
-            AsyncImage(url: shown.url) { phase in
-                if let img = phase.image {
-                    img.resizable().scaledToFit()
-                } else if phase.error != nil {
+            Group {
+                if let bitmap {
+                    Image(uiImage: bitmap).resizable().scaledToFit()
+                        .contextMenu {
+                            Button(NativeMessages.image_copy(lang)) { UIPasteboard.general.image = bitmap }
+                        }
+                } else if failed {
                     Image(systemName: "photo").foregroundStyle(.secondary)
                 } else {
                     ProgressView()
@@ -127,10 +133,34 @@ struct Lightbox: View {
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button(NativeMessages.tour_done(lang), action: close) }
-                ToolbarItem(placement: .topBarLeading) { ShareLink(item: shown.url) }
+                ToolbarItem(placement: .topBarLeading) {
+                    if let bitmap {
+                        // Transfer pixels, never the private authenticated hub URL.
+                        ShareLink(item: Image(uiImage: bitmap), preview: SharePreview(NativeMessages.native_image_plain(lang), image: Image(uiImage: bitmap))) {
+                            Label(NativeMessages.image_share(lang), systemImage: "square.and.arrow.up")
+                        }
+                    }
+                }
             }
             .toolbarBackground(.black, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .task(id: shown.id) {
+                bitmap = nil; failed = false
+                do {
+                    let (data, response) = try await URLSession.shared.data(from: shown.url)
+                    guard (response as? HTTPURLResponse)?.statusCode == 200,
+                          data.count <= 12 * 1024 * 1024,
+                          let source = CGImageSourceCreateWithData(data as CFData, nil),
+                          let info = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+                          let width = info[kCGImagePropertyPixelWidth] as? Int,
+                          let height = info[kCGImagePropertyPixelHeight] as? Int,
+                          width > 0, height > 0, width <= 32 * 1024 * 1024 / height,
+                          let image = UIImage(data: data) else { failed = true; return }
+                    try Task.checkCancellation()
+                    bitmap = image
+                } catch is CancellationError { }
+                catch { failed = true }
+            }
         }
     }
 }

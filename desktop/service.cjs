@@ -125,9 +125,11 @@ async function launchPaths({ home, binary, web, env, platform = process.platform
   return { home: posixHome, web: posixWeb, env: childEnv, cwd: runtimeBin };
 }
 class Service {
-  constructor({ home, binary, web, expectedVersion, residentService = false }) {
+  // host: where the hub runs when it is not this app's own native one,
+  // {procRoot, plan(port)} (wsl.cjs's wslHub); without it nothing changes
+  constructor({ home, binary, web, expectedVersion, residentService = false, host = null }) {
     if (!path.isAbsolute(home)) throw new Error('BACKPLANE_HOME must be absolute');
-    this.home = path.resolve(home); this.binary = binary; this.web = web; this.expectedVersion = expectedVersion;
+    this.home = path.resolve(home); this.binary = binary; this.web = web; this.expectedVersion = expectedVersion; this.host = host;
     if (typeof residentService !== 'boolean') throw new Error('Invalid resident service policy');
     this.residentService = residentService;
     this.child = null;
@@ -151,9 +153,11 @@ class Service {
       if (error.cause?.code === 'ECONNREFUSED') {
         // On Linux the resident hub writes its lock before restoring history
         // and opening the listener. Wait for that live process rather than
-        // launching another hub, which immediately loses the home lock.
-        if (process.platform === 'linux') {
-          try { await fs.access(`/proc/${lock.posixPid}`); }
+        // launching another hub, which immediately loses the home lock. A
+        // hub in WSL is the same, its /proc read over \\wsl.localhost.
+        const proc = this.host ? this.host.procRoot : process.platform === 'linux' ? '/proc' : null;
+        if (proc) {
+          try { await fs.access(path.join(proc, String(lock.posixPid))); }
           catch (ownerError) { if (ownerError.code === 'ENOENT') return null; throw ownerError; }
           throw Object.assign(new Error('Service is restoring history'), { code: 'ERR_SERVICE_BUSY' });
         }
@@ -170,7 +174,8 @@ class Service {
     return { origin, version: info.backplane, lockIdentity: { posixPid: lock.posixPid } };
   }
   async start() {
-    await fs.mkdir(this.home, { recursive: true, mode: 0o700 });
+    // a hub in WSL has its home made inside the distro, as its owner
+    if (!this.host) await fs.mkdir(this.home, { recursive: true, mode: 0o700 });
     const deadline = Date.now() + 300000;
     // A listening service can still be recovering a large log. Keep the local
     // window visible while waiting; a busy endpoint is not permission to spawn.
@@ -184,12 +189,9 @@ class Service {
         await new Promise(resolve => setTimeout(resolve, 100));
       }
     }
-    if (!this.binary || !path.isAbsolute(this.binary) || !this.web || !path.isAbsolute(this.web)) throw new Error('Set absolute BACKPLANE_SERVICE and BACKPLANE_WEB paths');
     const port = await servicePort(this.home);
-    const launch = await launchPaths({ home: this.home, binary: this.binary, web: this.web,
-      env: { ...process.env, BACKPLANE_HOME: this.home, ...(this.residentService ? { BACKPLANE_NO_UPDATE: '1' } : {}) } });
-    const args = ['--home', launch.home, '--port', String(port), '--host', '127.0.0.1', '--web', launch.web, '--foreground', '--no-tailscale'];
-    this.child = spawn(this.binary, args, { stdio: ['ignore', 'ignore', 'ignore'], env: launch.env, ...(launch.cwd ? { cwd: launch.cwd } : {}), windowsHide: true, detached: true });
+    const plan = await (this.host ? this.host.plan(port) : this.nativePlan(port));
+    this.child = spawn(plan.file, plan.args, { stdio: ['ignore', 'ignore', 'ignore'], env: plan.env, ...(plan.cwd ? { cwd: plan.cwd } : {}), windowsHide: true, detached: true });
     this.child.unref();
     let failure;
     this.child.once('error', () => { failure = new Error('Cannot start the packaged service'); });
@@ -210,6 +212,12 @@ class Service {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     throw new Error('Service readiness timed out');
+  }
+  async nativePlan(port) {
+    if (!this.binary || !path.isAbsolute(this.binary) || !this.web || !path.isAbsolute(this.web)) throw new Error('Set absolute BACKPLANE_SERVICE and BACKPLANE_WEB paths');
+    const launch = await launchPaths({ home: this.home, binary: this.binary, web: this.web,
+      env: { ...process.env, BACKPLANE_HOME: this.home, ...(this.residentService ? { BACKPLANE_NO_UPDATE: '1' } : {}) } });
+    return { file: this.binary, args: ['--home', launch.home, '--port', String(port), '--host', '127.0.0.1', '--web', launch.web, '--foreground', '--no-tailscale'], env: launch.env, cwd: launch.cwd };
   }
   async token() {
     const token = (await fs.readFile(path.join(this.home, 'token'), 'utf8')).trim();

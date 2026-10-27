@@ -11,6 +11,7 @@ import ../core/kihealth.bend as KH
 import ../core/model.bend as M
 import ../core/json.bend as J
 import ../core/client.bend as U
+import ../core/subthreads.bend as LEGACY
 import ../core/usage.bend as UZ
 import ../core/fm.bend as FM
 import ../core/todo.bend as TD
@@ -751,12 +752,24 @@ def Lay.active(+ty: Ty, rs: List<&2, U.ARow>, +q: String, +op: Map<&2, Bool>, +i
   SideCol.col(Lay.active.m(~(List<&2, SideFreshCtx>), ~Lay.fresh.run, ty, rs, q, op, ix, st, sel, c, y, Lay.fresh(ty, ix, st, sel, 0n)))
 
 # the list the "sidebar.view" setting picks (only that one is laid out)
-def Lay.side.list.k.m(~PC: Data, ~paint: PC -> ST.SideRowReq -> ST.SideRowStep, active: Bool, +ty: Ty, +q: String, +op: Map<&2, Bool>, +ix: U.SIx, +st: M.State, +sel: String, +now: Nat, +look: String, +rm: String, +c: D.Clip, +y: U32, +pc: PC) -> SideCol:
+# Existing legacy work stays visible in the native window as well.
+def Lay.side.legacy.m(~PC: Data, ~paint: PC -> ST.SideRowReq -> ST.SideRowStep, ts: List<&2, M.Thread>, +ty: Ty, +ix: U.SIx, +st: M.State, +sel: String, +now: Nat, +c: D.Clip, +y: U32, +pc: PC) -> SideCol:
+  match ts:
+    case Nil{}: SideCol{Out.none(), y, Nil{}, 0n}
+    case t <> rest:
+      SideCol.cat(Out.ops(Ty.text(ty, 2n, "Conversations in progress", c, 16, y, 28, T.Th.faint())),
+        Lay.rows.m(~PC, ~paint, ty, t <> rest, ix, st, sel, now, False{}, c, (y + 28 : U32), pc))
+
+def Lay.side.list.base.m(~PC: Data, ~paint: PC -> ST.SideRowReq -> ST.SideRowStep, active: Bool, +ty: Ty, +q: String, +op: Map<&2, Bool>, +ix: U.SIx, +st: M.State, +sel: String, +now: Nat, +look: String, +rm: String, +c: D.Clip, +y: U32, +pc: PC) -> SideCol:
   match active:
     case True{}:
       Lay.active.m(~PC, ~paint, ty, U.Active.rows.ix(st, ix, now, q), q, op, ix, st, sel, c, y, pc)
     case False{}:
       Lay.groups.m(~PC, ~paint, ty, U.Side.groups(U.Side.shown.ix(st, ix, now, q), now), q, op, ix, st, sel, now, look, rm, c, y, pc)
+
+def Lay.side.list.k.m(~PC: Data, ~paint: PC -> ST.SideRowReq -> ST.SideRowStep, +active: Bool, +ty: Ty, +q: String, +op: Map<&2, Bool>, +ix: U.SIx, +st: M.State, +sel: String, +now: Nat, +look: String, +rm: String, +c: D.Clip, +y: U32, +pc: PC) -> SideCol:
+  SideCol.then(Lay.side.list.base.m(~PC, ~paint, active, ty, q, op, ix, st, sel, now, look, rm, c, y, pc),
+    y1 => Lay.side.legacy.m(~PC, ~paint, U.Side.legacy.filtered(LEGACY.Legacy.live(st, sel), q), ty, ix, st, sel, now, c, y1, pc))
 
 def Lay.side.list.k(active: Bool, +ty: Ty, +q: String, +op: Map<&2, Bool>, +ix: U.SIx, +st: M.State, +sel: String, +now: Nat, +look: String, +rm: String, +c: D.Clip, +y: U32) -> Col:
   SideCol.col(Lay.side.list.k.m(~(List<&2, SideFreshCtx>), ~Lay.fresh.run, active, ty, q, op, ix, st, sel, now, look, rm, c, y, Lay.fresh(ty, ix, st, sel, now)))
@@ -6836,7 +6849,7 @@ def TL.entries.r(+ty: Ty, es: List<&2, M.Entry>, rs: List<&2, FO.Role>, +st: M.S
 
 # the times under the messages (the clock is the client's last tick)
 def TL.stamps(+es: List<&2, M.Entry>, +st: M.State, +sel: String, +pics: Map<&2, String>) -> STP.Stamps:
-  STP.Stamps.of(es, st, FO.Fold.now(pics), TL.turn(U.Ui.thread(st, sel)))
+  STP.Stamps.of.s(es, st, FO.Fold.now(pics), TL.turn(U.Ui.thread(st, sel)), STP.Stamp.stopped(U.Ui.thread(st, sel)))
 
 # the timeline from scratch, in the frame's language
 def TL.entries.loc(+ty: Ty, +es: List<&2, M.Entry>, +st: M.State, +sel: String, +px: U32, +pics: Map<&2, String>) -> List<&2, TLine>:

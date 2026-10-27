@@ -3,7 +3,8 @@
 What a person does with Backplane, as short stories to drive through the real
 UI. Platforms: **W** web page (headless Chromium), **D** desktop app
 (Electron, driven over CDP), **A** Android app (emulator), **I** iOS app (only
-on a Mac; skip otherwise). Each step is a press, a key or a gesture; time it
+on a Mac; skip otherwise), **DW** the Windows desktop app with its hub in a
+WSL distro (only from inside WSL on Windows, `win.sh`; skip elsewhere). Each step is a press, a key or a gesture; time it
 (SKILL.md, "Timing"). The hub is `hub.sh`'s: projects `proj` (the fixture)
 and `multi` (boards `alpha`, `beta`, plus an archived copy and a build
 snapshot), stand-in agents only.
@@ -11,14 +12,14 @@ snapshot), stand-in agents only.
 ## Getting started
 
 **S01 First run** (W D A)
-Open the hub fresh. The guided tour shows; Skip closes it. Settings → About →
+Open the hub fresh. The guided tour shows; Skip closes it. Settings → Tour →
 Show the tour opens it again; Done closes it and it stays closed after a
 reload.
 
 **S02 Add a project** (W D)
 Sidebar `+` → enter a folder path (a copy of the fixture) → Add. The project
-appears in the sidebar with a new thread selected, and the viewer opens on
-its board.
+appears in the sidebar with a new thread selected; pressing Board draws its
+board.
 
 **S03 Find a project or conversation** (W D A)
 Type part of a project name in the sidebar search: only matching projects
@@ -38,8 +39,10 @@ Send a message; while the reply streams press Stop. The turn ends as
 stopped within 2 s, and the composer takes a new message that then runs.
 
 **S06 Follow-ups while busy** (W D)
-Send a message, and while it runs send a second. The second waits in the
-queue (shown above the composer), then runs by itself after the first ends.
+Send a message, and while it runs send a second (Send reads "Steer" while a
+turn runs). The second is taken at once and answered after the first reply,
+which keeps streaming in place (it does not jump). Ctrl+Enter queues it
+instead: it waits above the composer, then runs by itself.
 
 **S07 Long history** (W D A)
 `hub.sh long` makes an 80-exchange thread. Open it: it opens at the newest
@@ -110,16 +113,18 @@ a double-click resets it. Close the viewer; open it again from the rail.
 
 **S20 Appearance** (W D A)
 Settings → Appearance: switch the theme (applies at once), the text size
-(text grows), the language to 日本語 (labels change) and back, and the
-sidebar to Active (one list of live threads).
+(text grows), the language to 日本語 where it is offered (labels change; on
+the web it is a preview, opened with `?lang=ja`) and back, and the sidebar
+to Active (one list of live threads).
 
 **S21 Folding the sidebars** (W D)
 Ctrl+B (Cmd+B) folds the sidebar to a strip and back; the rail's chevron makes
 the rail icons only. Both stay after a reload.
 
 **S22 Command palette and shortcuts** (W D)
-Ctrl+K opens the palette; typing filters; Enter runs "New thread". Ctrl+N makes
-a thread, Ctrl+J opens the floating terminal (it runs `echo hi`), Ctrl+1 jumps
+With a thread open: Ctrl+K opens the palette; typing filters; Enter runs
+"New thread". Ctrl+N makes a thread in the open thread's project (with none
+open it goes to the uberbot's chat), Ctrl+J opens the floating terminal (it runs `echo hi`), Ctrl+1 jumps
 to the first thread, Ctrl+Shift+S settles it.
 
 **S23 API keys** (W D A)
@@ -157,6 +162,55 @@ through the history and back down; while a reply streams, a swipe up holds.
 **S30 Phone viewer** (A)
 Open the viewer from a thread: the board draws; pinch zooms; the Sheet menu
 picks a schematic sheet and, in `multi`, a board.
+
+## Windows app, hub in WSL
+
+The app is this checkout's, so Windows as the choice has no hub of its own:
+it shows the startup error ("Set absolute BACKPLANE_SERVICE…") with Change
+hub. `win.sh` prints `HOME_DIR` (the distro hub's home), `PROJ` (the fixture
+in the distro) and `WPROJ` (a copy on C:).
+
+**S33 Run the hub in WSL** (DW)
+`win.sh start S33`: Windows' startup error with Change hub. Change hub lists
+Windows (now) and WSL · <distro>. Pick WSL: "Starting <distro>…", then
+"Backplane is not installed in <distro>." with Install and Change hub.
+Install: its lines show, then the hub's page (≤ 60 s). The hub is the one in
+the distro: `HOME_DIR/hub.lock` names a pid whose command line is the build
+under test. Settings → Network: the first row is Hub, "Runs on WSL ·
+<distro>.", and its Change… shows the chooser with WSL · <distro> (now);
+picking it brings the same hub back.
+
+**S34 Switch with the shortcut** (DW, after S33 in the same app)
+Ctrl+Shift+H on the hub's page: the chooser. Pick Windows: its startup
+error with Change hub. Ctrl+Shift+H → WSL · <distro>: the hub's page is back
+≤ 5 s with the same threads (its hub kept running). `win.sh quit`, then
+`win.sh again`: the app opens straight on the hub in WSL.
+
+**S35 Windows folders** (DW)
+Sidebar `+`: "Choose folder…" is there (Windows' own dialog, which CDP
+cannot press: look once by hand that it opens in the distro user's home).
+Type `WPROJ` (`C:\…`) in the field, Go to: the picker lists
+`/mnt/c/…/proj`; Add: the project shows with a thread. Type
+`\\wsl.localhost\<distro>` + `PROJ` with backslashes and Add: the project
+is `PROJ`. `\\wsl.localhost\NoSuchDistro\x` says "not a folder this hub
+can open".
+
+**S36 Explorer** (DW)
+In the `WPROJ` project's thread send `see <its /mnt/c path>/demo.kicad_pcb`;
+right-click the path in the message → Show in folder: a new Explorer window
+on the project's folder (`win.sh explorer` lists its LocationURL). Close
+exactly that window (`win.sh explorer-close URL`).
+
+**S37 The hub outlives the app** (DW)
+Send a message; while it streams, `win.sh quit` (the app's process is
+stopped). 5 s later the hub still answers `/hello` with the pid in
+`HOME_DIR/hub.lock` from before the quit. `win.sh again`: the hub's page;
+the thread holds the message and the reply, finished or still streaming.
+
+**S38 A distro that is gone** (DW)
+`win.sh start S38 wsl:NoSuchDistro`: "NoSuchDistro: There is no
+distribution with the supplied name." with Retry and Change hub. Change hub
+→ WSL · <distro> recovers (Install as in S33).
 
 ## Coming back
 

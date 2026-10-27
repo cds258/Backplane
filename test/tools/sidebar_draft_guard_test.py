@@ -71,6 +71,16 @@ class SidebarDraftGuard(unittest.TestCase):
             with self.assertRaisesRegex(guard.GuardError, "closure changed"):
                 guard.check(root)
 
+    def test_selected_mirror_bridge_source_change_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.copy_review(root)
+            guard.check(root)
+            path = root / "src/server/thin-mirror.bend"
+            path.write_text(path.read_text() + "\n# selected projection dependency changed\n")
+            with self.assertRaisesRegex(guard.GuardError, "thin-mirror.bend"):
+                guard.check(root)
+
     def test_build_and_cached_key_reject_body_read_before_any_tool_or_output(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

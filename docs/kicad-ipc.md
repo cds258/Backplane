@@ -97,3 +97,7 @@ The installer checks the archive format and runtime layout in a staging
 folder before moving it into the managed runtime directory. It refuses to
 overwrite an existing version, preserving that directory on failure; an
 existing separately installed compatible runtime can be selected by path.
+
+The companion footprint/model library is embedded in the shared service build;
+[library setup and qualification](kicad-library.md) describes its immutable pin,
+managed profile and actual CLI/IPC/GUI process environment.
